@@ -28,13 +28,6 @@ jobs:
       - name: Finalize release files
         run: node scripts/finalize-v0.1.1.mjs
 
-      - name: Validate finalized files
-        run: |
-          bash scripts/validate-agent-configs.sh
-          node scripts/check-routing-defaults.mjs
-          npm ci
-          npm test
-
       - name: Commit generated cleanup
         shell: bash
         run: |
@@ -48,3 +41,10 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "chore: finalize v0.1.1 release files"
           git push origin HEAD:release/v0.1.1-finalize
+
+      - name: Validate finalized files
+        run: |
+          bash scripts/validate-agent-configs.sh
+          node scripts/check-routing-defaults.mjs
+          npm ci
+          npm test
