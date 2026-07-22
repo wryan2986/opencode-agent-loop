@@ -16,18 +16,12 @@ permission:
   agent_loop: deny
   task: deny
   bash:
-    git status: allow
-    git diff: allow
-    git log: allow
-    git show: allow
-    ls: allow
-  git:
-    commit: deny
-    push: deny
-    reset: deny
-    clean: deny
-    checkout: deny
-    restore: deny
+    "*": deny
+    "git status*": allow
+    "git diff*": allow
+    "git log*": allow
+    "git show*": allow
+    "ls*": allow
 ---
 
 # Review Agent
@@ -71,7 +65,7 @@ Example workflow:
 ```
 git diff --cached --name-only          # → src/foo.js, src/bar.js
 git diff --cached src/foo.js           # → see actual changes in foo
-Read src/foo.js                        # → full file context (imports, etc.)
+Read src/foo.js                         # → full file context (imports, etc.)
 Read src/lib/dependency.js              # → allowed: foo.js imports from it
 Read server/config.js                   # → allowed: foo.js references config
 [Do NOT read src/unrelated.js]          # → not in diff, not a dependency

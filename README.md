@@ -1,158 +1,178 @@
 # OpenCode Agent Loop
 
-[![Project Status](https://img.shields.io/badge/status-pre--release-yellow?style=for-the-badge)](https://github.com/opencode-ai/opencode-agent-loop)
+[![Project Status](https://img.shields.io/badge/status-pre--release-yellow?style=for-the-badge)](https://github.com/wryan2986/opencode-agent-loop)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A reusable OpenCode agent-loop package for autonomous feature development in any software project.
+A reusable OpenCode agent-loop package for structured feature development with specialized planning, building, testing, review, recovery, and local agents.
 
-The agent-loop provides a complete feature lifecycle: plan → approve → test → build → verify → review → fix → escalate → commit, with automatic model routing and failover across multiple providers.
+> **Independent project:** OpenCode Agent Loop is a community project. It is not built, maintained, or endorsed by the OpenCode team.
 
----
+The workflow is:
 
-## 🚀 Quick Start (5 minutes)
+`plan → approve → baseline test → build → verify → review → fix/escalate → commit`
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/opencode-ai/opencode-agent-loop.git
-   cd opencode-agent-loop
-   ```
+The orchestrator uses a paid DeepSeek model for reliable coordination. Subagent roles use free-first model pools with automatic provider failover and controlled paid fallback.
 
-2. **Install the package**
-   ```bash
-   bash scripts/install.sh
-   ```
+## Important prerequisite
 
-3. **Activate for your shell**
-   ```bash
-   source ~/.bashrc  # or ~/.zshrc
-   ```
+This pre-release currently requires a **patched OpenCode build**. Stock OpenCode does not expose every subagent failure signal required by the orchestrator's failover logic.
 
-4. **Initialize your project**
-   ```bash
-   cd /path/to/your/project
-   opencode
-   /loop-init
-   ```
+Read [Required OpenCode Fork](docs/opencode-fork.md) before installation. The loop may incorrectly treat failed subagent work as successful without the patch.
 
-5. **Run a feature**
-   ```bash
-   opencode
-   /feature Implement user authentication system
-   ```
+## Quick start
 
----
+### 1. Prepare the patched OpenCode build
 
-## 🏗️ Architecture
+Follow [docs/opencode-fork.md](docs/opencode-fork.md), place the resulting `opencode` executable in your `PATH`, and verify it:
 
-The agent-loop implements a complete feature development lifecycle with six specialized agents working in sequence:
-
+```bash
+opencode --version
 ```
-                   User request
-                   |
-                   v
-+--------------------------------------+
-| Free-First Router                    |
-| Model selection and failover         |
-| Reads free-first-pools.json          |
-| Free models -> paid fallback         |
-+--------------------------------------+
+
+### 2. Clone this repository
+
+```bash
+git clone https://github.com/wryan2986/opencode-agent-loop.git
+cd opencode-agent-loop
+```
+
+### 3. Install the package
+
+```bash
+bash scripts/install.sh
+```
+
+### 4. Activate it in the current shell
+
+```bash
+source ~/.bashrc  # or ~/.zshrc
+```
+
+### 5. Initialize a project
+
+```bash
+cd /path/to/your/project
+opencode
+/loop-init
+```
+
+### 6. Run a feature
+
+```text
+/feature Implement user authentication
+```
+
+## Architecture
+
+```text
+              User request
                    |
                    v
 +--------------------------------------+
 | Orchestrator                         |
-| DeepSeek V4 Flash                    |
+| Paid DeepSeek V4 Flash               |
 | Plans, delegates, enforces stages    |
 +--------------------------------------+
                    |
                    v
 +--------------------------------------+
-| Role Routing                         |
-| Test      -> Free pool               |
-| Build     -> Free pool               |
-| Review    -> Free pool               |
-| Escalate  -> GPT-5.6 Large           |
-| Recover   -> Paid DeepSeek Flash     |
+| Free-first role routing              |
+| Test, build, review, explore         |
+| Free models -> controlled fallback   |
 +--------------------------------------+
                    |
                    v
 +--------------------------------------+
-| Model Registry                       |
-| config/model-registry.json           |
-| 79 models across 5 providers         |
-| Scores, privacy, and cooldowns       |
+| Model registry and role pools        |
+| Capability, privacy, cooldown state  |
 +--------------------------------------+
-```opencode-agent-loop/
-├── agents/              # Agent definitions (6 active agents)
-├── commands/            # Slash commands for OpenCode TUI
-├── config/              # Model routing configuration
-│   ├── model-registry.json    # 79 models with capability scores
-│   ├── free-first-pools.json # Ordered model pools per role
-│   └── free-first-config.json # Global failover settings
-├── lib/                 # Routing library modules
-├── runtime/             # Node runtime controller and failover entry
-├── .opencode/          # Project-local plugin and /loop command
-│   ├── failover-handler.mjs    # Retry, cooldown, checkpointing
-│   ├── paid-fallback.mjs        # Paid escalation controller
-│   ├── privacy-classifier.mjs    # Task sensitivity classification
-│   └── ntfy-enhancer.mjs       # Paid-fallback notifications
-├── skills/             # Reusable skills
-├── templates/          # Project template files
-├── docs/               # Documentation
-│   ├── agent-roles.md
-│   ├── configuration.md
-│   ├── safety-model.md
-│   └── tui-agent-loop-integration.md
-├── tests/              # Automated tests
-│   ├── routing-tests.mjs         # Failover scenario tests
-│   ├── runtime-tests.mjs         # Production runtime tests
-│   ├── tool-integration-tests.mjs # agent_loop tool integration
-│   └── bypass-detection.mjs     # Direct production tests
-├── scripts/            # Utility scripts
-│   ├── install.sh
-│   ├── uninstall.sh
-│   ├── validate.sh
-│   ├── smoke-test.sh
-│   └── activation-gate.sh
-├── opencode.json       # Global configuration
-├── CHANGELOG.md        # Release history
-├── CONTRIBUTING.md     # Contribution guidelines
-├── SECURITY.md         # Security reporting policy
-└── LICENSE             # MIT License
 ```
 
+The routing configuration lives in:
+
+- `config/free-first-config.json` — global routing and fallback policy
+- `config/free-first-pools.json` — ordered model pools by role
+- `config/model-registry.json` — capabilities and privacy classifications
+
+See [Architecture](docs/architecture.md) and [Configuration](docs/configuration.md) for details.
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `/feature <description>` | Run the staged feature workflow through the orchestrator |
+| `/loop <description>` | Run the `agent_loop` custom tool directly |
+| `/loop-init` | Add the project-specific agent-loop files to a repository |
+
+## Project structure
+
+```text
+opencode-agent-loop/
+├── agents/              Agent definitions
+├── commands/            OpenCode slash commands
+├── config/              Routing and model configuration
+├── lib/                 Routing and failover modules
+├── runtime/             Runtime controller and worker execution
+├── .opencode/           Plugin and project-local command integration
+├── skills/              Reusable project-analysis skills
+├── templates/           Files installed into target projects
+├── docs/                Architecture, configuration, safety, and usage
+├── tests/               Deterministic automated tests
+├── scripts/             Install, validation, and maintenance utilities
+├── opencode.json        Package-level OpenCode configuration
+├── CHANGELOG.md         Release history
+├── CONTRIBUTING.md      Contribution guidelines
+├── SECURITY.md          Vulnerability-reporting policy
+└── LICENSE              MIT License
+```
+
+## Safety model
+
+The package applies several layers of protection:
+
+- explicit approval before implementation
+- baseline and post-change testing
+- independent read-only review
+- no automatic push
+- explicit Bash denials for destructive Git commands
+- recursion guards for worker agents
+- privacy-aware model filtering
+- state checkpoints for interrupted work
+
+Prompt and permission controls are not an OS sandbox. Use a container or VM for untrusted repositories. See [Safety Model](docs/safety-model.md).
+
+## Validation
+
+```bash
+npm ci
+npm test
+bash scripts/validate.sh
+node scripts/check-doc-links.mjs
+```
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Agent Roles](docs/agent-roles.md)
+- [Configuration](docs/configuration.md)
+- [Model Providers](docs/providers.md)
+- [Safety Model](docs/safety-model.md)
+- [Required OpenCode Fork](docs/opencode-fork.md)
+- [TUI Integration](docs/tui-agent-loop-integration.md)
+- [Roadmap](docs/roadmap.md)
+
+## Contributing
+
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening an issue or pull request.
+
+## Security
+
+Do not report vulnerabilities in public issues. Follow [SECURITY.md](SECURITY.md).
+
+## License
+
+Distributed under the MIT License. See [LICENSE](LICENSE).
+
 ---
 
-## 📖 Documentation
-
-
-- [Agent Roles](docs/agent-roles.md) - Detailed descriptions of each agent's responsibilities
-- [Configuration Guide](docs/configuration.md) - How to configure model routing and failover
-- [Safety Model](docs/safety-model.md) - Safety features and protections
-- [TUI Integration](docs/tui-agent-loop-integration.md) - How the agent_loop tool integrates with OpenCode TUI
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to report bugs, suggest features, and submit pull requests.
-
-
----
-
-## 🛡️ Security
-
-
-If you discover a security vulnerability, please review our [SECURITY.md](SECURITY.md) file for reporting instructions.
-
-
----
-
-## 📜 License
-
-
-Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
-
-
----
-
-
-*This is a pre-release version. Features and APIs may change without backward compatibility guarantees until v1.0.0.*
+This is a pre-release project. Features and APIs may change before v1.0.0.

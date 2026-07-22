@@ -17,18 +17,16 @@ permission:
   agent_loop: deny
   task: deny
   bash:
-    git status: allow
-    git diff: allow
-    git log: allow
-    ls: allow
-    mkdir: allow
-  git:
-    commit: deny
-    push: deny
-    reset: deny
-    clean: deny
-    checkout: deny
-    restore: deny
+    "*": allow
+    "git commit*": deny
+    "git push*": deny
+    "git reset*": deny
+    "git clean*": deny
+    "git checkout*": deny
+    "git restore*": deny
+    "git rebase*": deny
+    "git merge*": deny
+    "git tag*": deny
 ---
 
 # Test Agent
@@ -73,8 +71,8 @@ Run in this **mandatory order:**
 6. UI or browser tests when the project provides them (Playwright, Cypress, Selenium, etc.). When capturing screenshots, save them with clear filenames. The review agent will inspect them visually during REVIEWING.
    - **Smallest-viewport screenshots:** When the project targets multiple screen sizes (mobile, tablet, desktop), always capture screenshots at the smallest supported viewport. New UI components that work at desktop but break at mobile are a common defect that screenshots catch.
 7. **End-to-end integration smoke test (for new API endpoints or external integrations):** If the implementation adds a new API route, external service call, or integration flow, run one real end-to-end test with a representative input. This is not about exhaustive testing — it's a smoke test to confirm the endpoint responds, the integration doesn't crash, and the error handling works. For web apps this might be `curl`; for CLI tools it might be running the command with sample data; for libraries it might be calling the function with typical arguments.
-7. Migration or isolation tests when database scope changes.
-8. **MCP tool-based verification** — If the project has MCP tools available (e.g., `android-test`, browser tools), use them for verification. Check the project's `AGENTS.md` and `opencode.json` for configured MCP servers.
+8. Migration or isolation tests when database scope changes.
+9. **MCP tool-based verification** — If the project has MCP tools available (e.g., `android-test`, browser tools), use them for verification. Check the project's `AGENTS.md` and `opencode.json` for configured MCP servers.
 
 ## Server lifecycle (Idea 4)
 
