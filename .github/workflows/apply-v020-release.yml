@@ -1,0 +1,38 @@
+name: Apply v0.2 release migration
+
+on:
+  push:
+    branches:
+      - release/v0.2.0-reliability
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/v0.2.0-reliability
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply migration
+        run: node scripts/apply-v020-release.mjs
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate
+        run: npm run validate
+      - name: Commit generated changes
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat: finish v0.2 reliability foundations"
+          git push origin HEAD:release/v0.2.0-reliability
