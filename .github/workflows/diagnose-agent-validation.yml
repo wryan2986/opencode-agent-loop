@@ -1,0 +1,21 @@
+name: Diagnose agent validation
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print agent validation
+        shell: bash
+        run: |
+          printf '%s\n' '=== AGENT FILES ==='
+          find agents -maxdepth 1 -type f -name '*.md' -printf '%f\n' | sort
+          printf '%s\n' '=== VALIDATION ==='
+          bash scripts/validate-agent-configs.sh
