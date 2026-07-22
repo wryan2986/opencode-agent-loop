@@ -67,7 +67,13 @@ jobs:
 
       - name: Build native standalone OpenCode
         working-directory: upstream-opencode
-        run: bun ./packages/opencode/script/build.ts --single --skip-install --skip-embed-web-ui
+        shell: bash
+        run: |
+          set +e
+          bun ./packages/opencode/script/build.ts --single --skip-install --skip-embed-web-ui 2>&1 | tee ../opencode-build.log
+          status=${PIPESTATUS[0]}
+          set -e
+          exit "$status"
 
       - name: Verify patched source contracts
         run: node scripts/check-opencode-patch-contract.mjs upstream-opencode
@@ -85,7 +91,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: opencode-supported-compatibility
-          path: opencode-tested-revision.txt
+          path: |
+            opencode-tested-revision.txt
+            opencode-build.log
 
   upstream-dev-probe:
     if: github.event_name != 'workflow_dispatch' || inputs.opencode_ref == ''
