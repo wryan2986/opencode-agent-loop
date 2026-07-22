@@ -7,6 +7,7 @@ import { loadPoolConfig, normalizePoolConfig, isModelCoolingDown } from '../lib/
 import { runOpenCodeWorker, resolveTimeoutMs } from './opencode-worker-runner.mjs';
 import { reapExpiredCooldowns } from '../lib/cooldown-manager.mjs';
 import { BudgetTracker } from '../lib/budget-manager.mjs';
+import { AgentLoopEventLogger, redactSensitive } from '../lib/event-log.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, '..');
@@ -14,17 +15,15 @@ const DEFAULT_LOG_DIR = resolve(PACKAGE_ROOT, '.opencode', 'agent-loop-logs');
 const DEFAULT_REGISTRY_PATH = resolve(PACKAGE_ROOT, 'config/model-registry.json');
 
 function loadFreeFirstConfig(configPath) {
-  try {
-    return JSON.parse(readFileSync(configPath, 'utf-8'));
-  } catch {
-    return {};
-  }
+  try { return JSON.parse(readFileSync(configPath, 'utf-8')); }
+  catch { return {}; }
 }
 
 function extractProviderTimeoutConfig(config) {
-  const providerTimeouts = config?.provider_timeouts_ms || {};
-  const latencyTimeoutMapping = config?.latency_timeout_mapping || {};
-  return { providerTimeouts, latencyTimeoutMapping };
+  return {
+    providerTimeouts: config?.provider_timeouts_ms || {},
+    latencyTimeoutMapping: config?.latency_timeout_mapping || {}
+  };
 }
 
 const ROLE_POOL = {
@@ -64,14 +63,44 @@ function tieredModels(normalized) {
 }
 
 function redact(text) {
-  return String(text || '')
-    .replace(/([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY)[A-Z0-9_]*=)[^\s]+/gi, '$1[REDACTED]')
-    .replace(/(Bearer\s+)[A-Za-z0-9._-]+/g, '$1[REDACTED]')
-    .slice(0, 4000);
+  return String(redactSensitive(String(text || ''))).slice(0, 4000);
 }
 
 function writeAttemptLog(logPath, event) {
-  appendFileSync(logPath, `${JSON.stringify({ timestamp: new Date().toISOString(), ...event })}\n`, 'utf8');
+  appendFileSync(logPath, `${JSON.stringify({ timestamp: new Date().toISOString(), ...redactSensitive(event) })}\n`, 'utf8');
+}
+
+function eventTypeForRouting(type) {
+  const map = {
+    'attempt-start': 'model.attempt.started',
+    'attempt-success': 'model.attempt.completed',
+    'attempt-retryable-failure': 'model.attempt.failed',
+    'attempt-task-failure': 'stage.task-failed',
+    'provider-wide-failure': 'provider.cooldown',
+    'skip-provider-cooldown': 'provider.skipped',
+    'budget-denied': 'budget.exceeded',
+    'budget-exceeded': 'budget.exceeded',
+    'paid-denied': 'paid-fallback.denied',
+    'cooldown-reap': 'provider.cooldown-reaped'
+  };
+  return map[type] || 'routing.event';
+}
+
+function sleep(ms, signal) {
+  if (!ms || ms <= 0) return Promise.resolve();
+  return new Promise((resolvePromise, reject) => {
+    const timer = setTimeout(resolvePromise, ms);
+    if (signal) {
+      const abort = () => {
+        clearTimeout(timer);
+        const error = new Error('Retry wait cancelled');
+        error.code = 'USER_CANCELLED';
+        reject(error);
+      };
+      if (signal.aborted) abort();
+      else signal.addEventListener('abort', abort, { once: true });
+    }
+  });
 }
 
 export async function executeAgentTask({
@@ -93,20 +122,21 @@ export async function executeAgentTask({
   forceModels,
   progressCallback,
   budgetTaskId = taskId,
-  budgetStep = role
+  budgetStep = role,
+  maxRetries = 0,
+  eventLogger
 }) {
   if (!role) throw new Error('executeAgentTask requires role');
   if (!agent) throw new Error('executeAgentTask requires agent');
   if (!prompt) throw new Error('executeAgentTask requires prompt');
 
+  const retryLimit = Number.isInteger(maxRetries) ? Math.max(0, Math.min(maxRetries, 5)) : 0;
+  const events = eventLogger || new AgentLoopEventLogger({ taskId: budgetTaskId, cwd });
   mkdirSync(logDir, { recursive: true });
   const logPath = resolve(logDir, `${taskId}-${role}.jsonl`);
   writeFileSync(logPath, '', 'utf8');
 
-  // Reap expired cooldowns before selecting models — ensures recently-expired
-  // models are available again.
   reapExpiredCooldowns();
-
   const poolName = resolvePoolName(role);
   const poolConfig = loadPoolConfig(poolsPath);
   const normalized = normalizePoolConfig(poolConfig, { role: poolName });
@@ -114,17 +144,13 @@ export async function executeAgentTask({
 
   if (Array.isArray(forceModels) && forceModels.length > 0) {
     const forceSet = new Set(forceModels);
-    models = models.filter(m => forceSet.has(m.modelId));
+    models = models.filter(model => forceSet.has(model.modelId));
     if (models.length === 0) {
+      events.emit('stage.blocked', { stage: budgetStep, role, data: { code: 'ALL_MODELS_FAILED', reason: 'Smoke-responsive models were filtered out.' } });
       return {
-        status: 'failed',
-        code: 'ALL_MODELS_FAILED',
-        taskId, role, agent, poolName,
-        attemptedModels: [],
-        successfulModel: null,
-        attemptDetails: [],
-        stepStartedAt: new Date().toISOString(),
-        logPath,
+        status: 'failed', code: 'ALL_MODELS_FAILED', taskId, role, agent, poolName,
+        attemptedModels: [], successfulModel: null, attemptDetails: [],
+        stepStartedAt: new Date().toISOString(), logPath,
         summary: 'All responsive models from smoke test were filtered out before work began.'
       };
     }
@@ -136,16 +162,17 @@ export async function executeAgentTask({
     taskId: budgetTaskId,
     step: budgetStep,
     configPath,
-    registryPath
+    registryPath,
+    cwd
   });
 
   const failover = new FailoverHandler(configPath, poolsPath);
   await failover.loadConfig();
   await failover.loadPools();
   const paidFallback = new PaidFallbackController(configPath);
-
   const attemptDetails = [];
-  let stepStartedAt = new Date().toISOString();
+  const stepStartedAt = new Date().toISOString();
+  events.emit('stage.started', { stage: budgetStep, role, data: { agent, poolName, retryLimit, candidateModels: models.map(model => model.modelId) } });
 
   const result = await failover.runWithFailover({
     taskId,
@@ -154,7 +181,15 @@ export async function executeAgentTask({
     models,
     paidFallback,
     paidApproved: metadata.paidApproved === true || process.env.AGENT_LOOP_PAID_APPROVED === '1',
-    log: event => writeAttemptLog(logPath, event),
+    log: event => {
+      writeAttemptLog(logPath, event);
+      events.emit(eventTypeForRouting(event.type), {
+        stage: budgetStep,
+        role,
+        modelId: event.modelId,
+        data: { ...event, type: undefined }
+      });
+    },
     canAttempt: async () => {
       const budget = budgetTracker.snapshot();
       return budgetTracker.canContinue()
@@ -163,110 +198,125 @@ export async function executeAgentTask({
     },
     invoke: async ({ modelId, tier, attemptIndex, attempts }) => {
       const checkpoint = attempts.length > 0
-        ? `\n\nPrevious provider attempts failed. Before editing, inspect repository state and git diff. Attempted models: ${attempts.map(a => a.modelId).join(', ')}.`
+        ? `\n\nPrevious provider attempts failed. Before editing, inspect repository state and git diff. Attempted models: ${attempts.map(item => item.modelId).join(', ')}.`
         : '';
       const workerPrompt = `${prompt}${checkpoint}`;
-      const attemptLog = resolve(logDir, `${taskId}-${role}-attempt-${attemptIndex + 1}.log`);
-      const progressLogPath = resolve(logDir, `${taskId}-${role}-attempt-${attemptIndex + 1}-progress.jsonl`);
-      const attemptStartedAt = new Date().toISOString();
-      const effectiveTimeoutMs = resolveTimeoutMs({ model: modelId, timeoutMs, providerTimeouts, latencyTimeoutMapping });
-      if (progressCallback) {
-        progressCallback({ title: `Trying ${modelId.split('/').pop()}...`, metadata: { model: modelId, tier, action: 'starting', attempt: attemptIndex + 1, timeoutMs: effectiveTimeoutMs } });
-        await new Promise(r => setImmediate(r));
-      }
       const modelLabel = modelId.split('/').pop();
-      const stdoutTailCallback = (tail) => {
+      let finalInvocation = null;
+
+      for (let retryIndex = 0; retryIndex <= retryLimit; retryIndex += 1) {
+        if (!budgetTracker.canContinue()) {
+          const budget = budgetTracker.snapshot();
+          return { success: false, code: 'BUDGET_EXCEEDED', budgetExceeded: true, budget };
+        }
+
+        const suffix = retryIndex > 0 ? `-retry-${retryIndex}` : '';
+        const attemptLog = resolve(logDir, `${taskId}-${role}-attempt-${attemptIndex + 1}${suffix}.log`);
+        const progressLogPath = resolve(logDir, `${taskId}-${role}-attempt-${attemptIndex + 1}${suffix}-progress.jsonl`);
+        const attemptStartedAt = new Date().toISOString();
+        const effectiveTimeoutMs = resolveTimeoutMs({ model: modelId, timeoutMs, providerTimeouts, latencyTimeoutMapping });
+        events.emit('model.invocation.started', { stage: budgetStep, role, modelId, data: { tier, attemptIndex, retryIndex, timeoutMs: effectiveTimeoutMs } });
+
         if (progressCallback) {
-          progressCallback({ title: modelLabel, metadata: { model: modelId, tail, action: 'progress', attempt: attemptIndex + 1 } });
+          progressCallback({ title: `Trying ${modelLabel}${retryIndex ? ` retry ${retryIndex}` : ''}...`, metadata: { model: modelId, tier, action: 'starting', attempt: attemptIndex + 1, retry: retryIndex, timeoutMs: effectiveTimeoutMs } });
+          await new Promise(resolvePromise => setImmediate(resolvePromise));
         }
-      };
-      let usageRecordedIncrementally = false;
-      const invocation = await workerAdapter({
-        cwd,
-        agent,
-        model: modelId,
-        prompt: workerPrompt,
-        timeoutMs: effectiveTimeoutMs,
-        env: {
-          ...env,
-          AGENT_LOOP_PARENT_SESSION: parentSessionId || '',
-          AGENT_LOOP_TASK_ID: taskId,
-          AGENT_LOOP_ROLE: role,
-          AGENT_LOOP_MODEL: modelId,
-          AGENT_LOOP_WORKER_EXECUTABLE: process.env.AGENT_LOOP_WORKER_EXECUTABLE || 'opencode'
-        },
-        signal,
-        title: taskId,
-        progressLogPath,
-        providerTimeouts,
-        latencyTimeoutMapping,
-        stdoutTailCallback,
-        onUsage: ({ usage, reportedCostUsd }) => {
-          usageRecordedIncrementally = true;
-          const budget = budgetTracker.recordUsage({ modelId, usage, reportedCostUsd, step: budgetStep });
-          writeAttemptLog(logPath, { type: 'budget-usage', taskId: budgetTaskId, step: budgetStep, modelId, usage, budget });
-          if (progressCallback) {
-            progressCallback({ title: `Budget: ${budget.used.total} tokens / ${budget.used.billableCostUsd.toFixed(4)}`, metadata: { action: 'budget', budget } });
+
+        const stdoutTailCallback = tail => {
+          if (progressCallback) progressCallback({ title: modelLabel, metadata: { model: modelId, tail, action: 'progress', attempt: attemptIndex + 1, retry: retryIndex } });
+        };
+        let usageRecordedIncrementally = false;
+        const invocation = await workerAdapter({
+          cwd,
+          agent,
+          model: modelId,
+          prompt: workerPrompt,
+          timeoutMs: effectiveTimeoutMs,
+          env: {
+            ...env,
+            AGENT_LOOP_PARENT_SESSION: parentSessionId || '',
+            AGENT_LOOP_TASK_ID: budgetTaskId,
+            AGENT_LOOP_ROLE: role,
+            AGENT_LOOP_MODEL: modelId,
+            AGENT_LOOP_WORKER_EXECUTABLE: process.env.AGENT_LOOP_WORKER_EXECUTABLE || 'opencode'
+          },
+          signal,
+          title: taskId,
+          progressLogPath,
+          providerTimeouts,
+          latencyTimeoutMapping,
+          stdoutTailCallback,
+          onUsage: ({ usage, reportedCostUsd }) => {
+            usageRecordedIncrementally = true;
+            const budget = budgetTracker.recordUsage({ modelId, usage, reportedCostUsd, step: budgetStep });
+            writeAttemptLog(logPath, { type: 'budget-usage', taskId: budgetTaskId, step: budgetStep, modelId, usage, budget });
+            events.emit(budget.exceeded ? 'budget.exceeded' : 'budget.updated', { stage: budgetStep, role, modelId, data: { usage, budget } });
+            if (progressCallback) progressCallback({ title: `Budget: ${budget.used.total} tokens / $${budget.used.billableCostUsd.toFixed(4)}`, metadata: { action: 'budget', budget } });
+            return budget;
           }
-          return budget;
-        }
-      });
-      if (!usageRecordedIncrementally && invocation?.usage) {
-        invocation.budget = budgetTracker.recordUsage({
-          modelId,
-          usage: invocation.usage,
-          reportedCostUsd: invocation.reportedCostUsd,
-          step: budgetStep
         });
+
+        if (!usageRecordedIncrementally && invocation?.usage) {
+          invocation.budget = budgetTracker.recordUsage({ modelId, usage: invocation.usage, reportedCostUsd: invocation.reportedCostUsd, step: budgetStep });
+        }
+        const budget = budgetTracker.snapshot();
+        if (budget.exceeded) {
+          invocation.success = false;
+          invocation.code = 'BUDGET_EXCEEDED';
+          invocation.budgetExceeded = true;
+          invocation.budget = budget;
+        }
+
+        writeFileSync(attemptLog, [
+          `model=${modelId}`,
+          `tier=${tier}`,
+          `retryIndex=${retryIndex}`,
+          `timeoutMs=${effectiveTimeoutMs}`,
+          `exitCode=${invocation.exitCode ?? ''}`,
+          `usage=${JSON.stringify(invocation.usage || {})}`,
+          `reportedCostUsd=${invocation.reportedCostUsd || 0}`,
+          `budgetExceeded=${invocation.budgetExceeded === true}`,
+          '--- stdout ---', redact(invocation.stdout),
+          '--- stderr ---', redact(invocation.stderr)
+        ].join('\n'), 'utf8');
+
+        const detail = {
+          modelId, tier, attemptIndex: attemptIndex + 1, retryIndex,
+          startedAt: attemptStartedAt, finishedAt: new Date().toISOString(),
+          timedOut: Boolean(invocation.timedOut),
+          lastActivityAt: invocation.lastActivityAt ? new Date(invocation.lastActivityAt).toISOString() : null,
+          exitCode: invocation.exitCode, success: Boolean(invocation.success), code: invocation.code || null,
+          usage: invocation.usage || null, reportedCostUsd: invocation.reportedCostUsd || 0,
+          budgetExceeded: invocation.budgetExceeded === true,
+          budget: invocation.budget || budgetTracker.snapshot(), attemptLog, progressLogPath
+        };
+        attemptDetails.push(detail);
+        events.emit(invocation.success ? 'model.invocation.completed' : 'model.invocation.failed', { stage: budgetStep, role, modelId, data: detail });
+        finalInvocation = invocation;
+
+        if (invocation.success || invocation.budgetExceeded || invocation.code === 'BUDGET_EXCEEDED') break;
+        const classification = failover.classifyFailure(invocation);
+        if (!classification.retryable || retryIndex >= retryLimit) break;
+        const delayMs = failover.getBackoffDelay(retryIndex);
+        events.emit('model.retry.scheduled', { stage: budgetStep, role, modelId, data: { retryIndex: retryIndex + 1, delayMs, reason: classification.reason } });
+        await sleep(delayMs, signal);
       }
-      const budget = budgetTracker.snapshot();
-      if (budget.exceeded) {
-        invocation.success = false;
-        invocation.code = 'BUDGET_EXCEEDED';
-        invocation.budgetExceeded = true;
-        invocation.budget = budget;
-      }
-      writeFileSync(attemptLog, [
-        `model=${modelId}`,
-        `tier=${tier}`,
-        `timeoutMs=${effectiveTimeoutMs}`,
-        `exitCode=${invocation.exitCode ?? ''}`,
-        `usage=${JSON.stringify(invocation.usage || {})}`,
-        `reportedCostUsd=${invocation.reportedCostUsd || 0}`,
-        `budgetExceeded=${invocation.budgetExceeded === true}`,
-        '--- stdout ---',
-        redact(invocation.stdout),
-        '--- stderr ---',
-        redact(invocation.stderr)
-      ].join('\n'), 'utf8');
-      writeAttemptLog(logPath, { type: 'attempt-output', modelId, tier, attemptLog, progressLogPath, timedOut: invocation.timedOut });
-      const detail = {
-        modelId,
-        tier,
-        attemptIndex: attemptIndex + 1,
-        startedAt: attemptStartedAt,
-        finishedAt: new Date().toISOString(),
-        timedOut: !!invocation.timedOut,
-        lastActivityAt: invocation.lastActivityAt ? new Date(invocation.lastActivityAt).toISOString() : null,
-        exitCode: invocation.exitCode,
-        success: !!invocation.success,
-        code: invocation.code || null,
-        usage: invocation.usage || null,
-        reportedCostUsd: invocation.reportedCostUsd || 0,
-        budgetExceeded: invocation.budgetExceeded === true,
-        budget: invocation.budget || budgetTracker.snapshot(),
-        logPath: attemptLog,
-        progressLogPath
-      };
-      attemptDetails.push(detail);
-      const status = invocation.success ? 'ok' : invocation.timedOut ? 'timeout' : 'failed';
-      const reason = invocation.success ? '' : invocation.code || 'error';
+
+      const status = finalInvocation?.success ? 'ok' : finalInvocation?.timedOut ? 'timeout' : 'failed';
       if (progressCallback) {
-        progressCallback({ title: `${modelId.split('/').pop()}: ${status}${reason ? ' (' + reason + ')' : ''}`, metadata: { model: modelId, action: 'result', status, code: invocation.code || null, timedOut: !!invocation.timedOut, elapsed: new Date() - new Date(attemptStartedAt) } });
-        await new Promise(r => setImmediate(r));
+        progressCallback({ title: `${modelLabel}: ${status}${finalInvocation?.code ? ` (${finalInvocation.code})` : ''}`, metadata: { model: modelId, action: 'result', status, code: finalInvocation?.code || null, timedOut: Boolean(finalInvocation?.timedOut) } });
+        await new Promise(resolvePromise => setImmediate(resolvePromise));
       }
-      return invocation;
+      return finalInvocation;
     }
+  });
+
+  const finalBudget = budgetTracker.snapshot();
+  events.emit(result.status === 'completed' ? 'stage.completed' : 'stage.failed', {
+    stage: budgetStep,
+    role,
+    modelId: result.successfulModel,
+    data: { status: result.status, code: result.code || null, attemptedModels: result.attemptedModels || [], budget: finalBudget }
   });
 
   return {
@@ -276,10 +326,11 @@ export async function executeAgentTask({
     agent,
     poolName,
     logPath,
+    eventLogPath: events.path,
     stepStartedAt,
     attemptDetails,
-    attemptedModels: result.attemptedModels || result.attempts?.map(a => a.modelId) || [],
+    attemptedModels: result.attemptedModels || result.attempts?.map(item => item.modelId) || [],
     successfulModel: result.successfulModel || null,
-    budget: budgetTracker.snapshot()
+    budget: finalBudget
   };
 }
