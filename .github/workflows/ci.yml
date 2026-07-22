@@ -1,0 +1,71 @@
+name: CI
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate JSON configs
+        run: |
+          python3 -c "
+          import json, glob, sys
+          errors = 0
+          for f in glob.glob('config/*.json'):
+            try:
+              json.load(open(f))
+              print(f'OK: {f} is valid JSON')
+            except json.JSONDecodeError as e:
+              print(f'FAIL: {f} - {e}')
+              errors += 1
+          sys.exit(errors)
+          "
+      - name: Check agent frontmatter
+        run: |
+          errors=0
+          for f in agents/*.md; do
+            if ! head -1 "$f" | grep -q '^---$';
+            then
+              echo "FAIL: $f missing frontmatter"
+              errors=$((errors+1))
+            fi
+          done
+          [ "$errors" -eq 0 ] || exit 1
+      - name: Run tests
+        run: npm test
+      - name: Check for credentials
+        run: |
+          if grep -rEl '(ghp_|gho_|ghu_|ghs_|github_pat|sk-[a-zA-Z0-9]{20,}|-----BEGIN.*PRIVATE KEY)' -- . ':!node_modules' ':!.git' 2>/dev/null; then
+            echo "FAIL: Potential credentials found"
+            exit 1
+          fi
+          echo "OK: No credentials detected"
+
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for .env files
+        run: |
+          if ls .env* 2>/dev/null | grep -qv '.env.example'; then
+            echo "FAIL: .env files should not be committed"
+            exit 1
+          fi
+          echo "OK: No .env files found"

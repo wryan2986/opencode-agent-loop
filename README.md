@@ -1,78 +1,114 @@
 # OpenCode Agent Loop
 
-A standalone, reusable OpenCode agent-loop package for autonomous feature development in any software project.
+[![Project Status](https://img.shields.io/badge/status-pre--release-yellow?style=for-the-badge)](https://github.com/opencode-ai/opencode-agent-loop)
 
-This package now includes a real OpenCode TUI integration: chat with the primary orchestrator normally, and for development work it calls the `agent_loop` custom tool. The tool invokes the Node runtime, which routes delegated worker tasks through centralized failover and launches workers with explicit `opencode run --agent ... --model ...` invocations.
+A reusable OpenCode agent-loop package for autonomous feature development in any software project.
 
-## Architecture
+The agent-loop provides a complete feature lifecycle: plan → approve → test → build → verify → review → fix → escalate → commit, with automatic model routing and failover across multiple providers.
 
-Six reusable agents implement a complete feature lifecycle: plan → approve → test → build → test → review → fix → escalate → commit.
+---
 
-The system uses a **free-first cloud routing** layer with automatic failover across 5 connected providers (OpenCode Zen, Cerebras, Groq, NVIDIA, OpenRouter).
+## 🚀 Quick Start (5 minutes)
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/opencode-ai/opencode-agent-loop.git
+   cd opencode-agent-loop
+   ```
+
+2. **Install the package**
+   ```bash
+   bash scripts/install.sh
+   ```
+
+3. **Activate for your shell**
+   ```bash
+   source ~/.bashrc  # or ~/.zshrc
+   ```
+
+4. **Initialize your project**
+   ```bash
+   cd /path/to/your/project
+   opencode
+   /loop-init
+   ```
+
+5. **Run a feature**
+   ```bash
+   opencode
+   /feature Implement user authentication system
+   ```
+
+---
+
+## 🏗️ Architecture
+
+The agent-loop implements a complete feature development lifecycle with six specialized agents working in sequence:
 
 ```
 User request
-     │
-     ▼
+│
+▼
 ┌──────────────────────────────────────┐
-│  Free-First Router                    │  Reads config/free-first-pools.json
-│  (model selection + failover)         │  Tries free → paid fallback
+│ Free-First Router                 │ Reads config/free-first-pools.json
+│ (model selection + failover)       │ Tries free → paid fallback
 └──────────┬───────────────────────────┘
            │ selects model for each role
            ▼
 ┌──────────────────────────┐
-│  Orchestrator             │  DeepSeek V4 Flash (paid orchestrator)
-│  (primary)                │  Plans, delegates, enforces stages
+│ Orchestrator           │ DeepSeek V4 Flash (paid orchestrator)
+│ (primary)              │ Plans, delegates, enforces stages
 └───────┬──────────────────┘
-        │ delegates to
-   ┌────┼────┬────┬────┬────┐
-   │    │    │    │    │    │
-   ▼    ▼    ▼    ▼    ▼    ▼
+       │ delegates to
+       ┌┼────┬────┬────┬────┐
+       │ │ │ │ │ │
+       ▼ ▼ ▼ ▼ ▼ ▼
 ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐
 │test│ │bld │ │rev │ │esc │ │rec │
 │Free│ │Free│ │Free│ │GPT5│ │Paid│
-│Pool│ │Pool│ │Pool│ │.5  │ │DS  │
+│Pool│ │Pool│ │Pool│ │.5 │ │DS │
 └────┘ └────┘ └────┘ └────┘ └────┘
-  │       │      │       │      │
-  └──┬────┘      │       │      │
-     │    ┌──────┘       │      │
-     │    │    ┌─────────┘      │
-     │    │    │    ┌───────────┘
-     ▼    ▼    ▼    ▼
+   │ │ │ │ 
+   └──┬────┘ │ │
+      │ ┌──────┘ │
+      │ │ ┌─────────┘
+      │ │ │ ┌───────────┘
+      ▼ ▼ ▼ ▼
 ┌──────────────────────────────┐
-│  Model Registry               │  79 models, 5 providers
-│  config/model-registry.json   │  Capability scores, privacy, cooldown
+│ Model Registry             │ 79 models, 5 providers
+│ config/model-registry.json  │ Capability scores, privacy, cooldown
 └──────────────────────────────┘
 ```
 
-## Model routing
+### Agent Roles
 
-The system uses **paid-primary cloud routing** with ordered failover. Each role has a pool of models tried in sequence: paid models first, then free fallback only when all paid options are exhausted.
+| Agent | Responsibility |
+|-------|---------------|
+| **Orchestrator** | Primary decision-maker that plans tasks and delegates to specialized agents |
+| **Test Agent** | Establishes baseline and verifies implementation quality |
+| **Build Agent** | Implements the requested feature |
+| **Review Agent** | Inspects diffs and enforces quality gates |
+| **Escalation Agent** | Handles complex failures and exceptional cases |
+| **Reconcile Agent** | Final validation before commit |
 
-| Agent | Primary (Paid) | Pool File Reference |
-|-------|---------------|---------------------|
-| orchestrator | `opencode-go/deepseek-v4-flash` | `config/free-first-pools.json` → orchestrator pool |
-| test-fixer | `opencode-go/deepseek-v4-flash` | `config/free-first-pools.json` → test-fixer pool |
-| build-worker | `opencode-go/deepseek-v4-flash` | `config/free-first-pools.json` → builder pool |
-| reconcile | `opencode-go/deepseek-v4-flash` | Direct assignment (paid) |
-| review | `opencode-go/mimo-v2.5` | `config/free-first-pools.json` → reviewer pool |
-| escalation | `opencode-go/deepseek-v4-flash` | Direct assignment (paid) |
+See [docs/agent-roles.md](docs/agent-roles.md) for detailed role definitions.
 
-Pools are defined in `config/free-first-pools.json` and support automatic failover across providers when a model is rate-limited, cooldowned, or unavailable.
+---
 
-### Key principles
+## 🔧 Installation
 
-- **Paid-primary**: Each role tries paid models from multiple providers before attempting free fallback.
-- **Provider diversity**: No provider is a single point of failure; models from different providers back each other up.
-- **Cooldown management**: Models that fail (429, 503, timeout) are placed in cooldown for configurable durations.
-- **Task state preservation**: Before switching models, task state is checkpointed so the new model can continue seamlessly.
-- **Privacy-aware routing**: Sensitive tasks exclude models from providers with unsuitable data policies.
+### Prerequisites
 
-## Installation
+- OpenCode CLI (v1.0+)
+- Node.js (v18+)
+- Git
+
+### Steps
 
 ```bash
-# Clone or copy the package
-cd opencode-agent-loop
+# Clone the repository
+# git clone https://github.com/opencode-ai/opencode-agent-loop.git
+# cd opencode-agent-loop
 
 # Run the installer
 bash scripts/install.sh
@@ -81,71 +117,69 @@ bash scripts/install.sh
 source ~/.bashrc  # or ~/.zshrc
 ```
 
-The installer adds `OPENCODE_CONFIG_DIR` to your shell configuration, pointing OpenCode to this package.
+The installer:
+- Adds `OPENCODE_CONFIG_DIR` to your shell configuration
+- Makes agent-loop commands available globally
+- Sets up configuration directory structure
 
-## Validation
+---
 
-```bash
-bash scripts/validate.sh
-```
+## ⚙️ Configuration
 
-## Initialize a project
+The agent-loop uses a **paid-primary cloud routing** system with automatic failover across multiple providers.
 
-```bash
-cd /path/to/your/project
-opencode
-```
 
-Then in the OpenCode TUI:
+### Model Routing
 
-```
-/loop-init
-```
+Each agent role has a defined model pool that is tried in sequence:
+- Paid models first
+- Free models as fallback when all paid options are exhausted
 
-This analyzes your repository and creates or updates `AGENTS.md` with project-specific instructions.
+Configuration files:
+- `config/free-first-pools.json` - Model pools per agent role
+- `config/model-registry.json` - 79 models with capability scores and privacy classifications
+- `config/free-first-config.json` - Global failover, cooldown, and privacy settings
 
-## Run a feature
+See [docs/configuration.md](docs/configuration.md) for detailed configuration reference.
 
-```bash
-cd /path/to/your/project
-opencode
-```
+### Key Principles
 
-Then in the OpenCode TUI:
 
-```
-/feature <description>
-```
+- **Paid-primary routing**: Each role tries paid models from multiple providers before attempting free fallback
+- **Provider diversity**: No single provider is a single point of failure
+- **Cooldown management**: Models that fail (429, 503, timeout) are placed in cooldown for configurable durations
+- **Task state preservation**: Task state is checkpointed before switching models
+- **Privacy-aware routing**: Sensitive tasks exclude models from providers with unsuitable data policies
 
-Example:
 
-```
-/feature Implement user profile editing
-```
+---
 
-## Run the agent_loop tool
+## 🛡️ Safety Model
 
-Open the project:
 
-```bash
-opencode
-```
+The agent-loop implements multiple safety protections:
 
-Then chat normally with the orchestrator:
+### Model Selection Safeguards
 
-```text
-Audit the recipe import flow, fix any defects, run the relevant tests, and review the result.
-```
+- **Privacy classification**: Tasks are classified by sensitivity before model assignment
+- **Provider restrictions**: Models from providers with unsuitable data policies are excluded for sensitive tasks
+- **Cooldown enforcement**: Failed models are temporarily disabled to prevent repeated failures
 
-Or explicitly force the tool path:
 
-```text
-/loop Audit the entire settings section and fix broken functionality
-```
+### Workflow Safeguards
 
-Both normal orchestrator delegation and `/loop` use the same `agent_loop` custom tool and Node runtime. See `docs/tui-agent-loop-integration.md` for the execution path, configuration, paid fallback policy, logs, tests, and limitations.
+- **Stage enforcement**: Each workflow stage has explicit entry/exit criteria
+- **Retry limits**: Maximum 2 fix cycles before escalation
+- **Checkpointing**: Task state is preserved across model switches
+- **User approval gates**: Critical decisions require user confirmation
 
-## Workflow stages
+
+See [docs/safety-model.md](docs/safety-model.md) for comprehensive safety documentation.
+
+---
+
+## 📋 Workflow Stages
+
 
 ```
 PLANNING
@@ -155,95 +189,114 @@ AWAITING_APPROVAL
 │ User reviews and approves the plan
 ▼
 BASELINE_TESTING
-│ Test agent (DeepSeek V4 Flash) establishes baseline
+│ Test agent establishes baseline metrics
 ▼
 IMPLEMENTING
-│ Build worker (DeepSeek V4 Flash) implements the change
+│ Build agent implements the requested feature
 ▼
 VERIFYING
-│ Test agent (DeepSeek V4 Flash) verifies implementation
+│ Test agent verifies implementation quality
 ▼
 REVIEWING
-│ Review agent (MiMo V2.5) inspects diff
-│ 
-├── PASS ──► READY_TO_COMMIT
-│
-└── FAIL ──► FIXING (back to IMPLEMENTING, max 2 cycles)
-│
-└── 2 failures ──► ESCALATING (DeepSeek V4 Flash)
-│
-▼
-(back to BASELINE_TESTING)
+│ Review agent inspects diff and quality gates
+   ├── PASS ──► READY_TO_COMMIT
+   │
+   └── FAIL ──► FIXING (back to IMPLEMENTING, max 2 cycles)
+         │
+         └── 2 failures ──► ESCALATING
+               │
+               ▼
+         (back to BASELINE_TESTING)
 ```
 
-## Configuration precedence
+---
 
-1. **OPENCODE_CONFIG_DIR** — This package's agents/ and commands/ are available globally.
-2. **Project AGENTS.md** — Each project's root `AGENTS.md` supplies project-specific instructions that agents read at runtime.
-3. **Project .opencode/** — Project-level overrides for agents, commands, and opencode.json when genuinely needed. Use sparingly.
-
-If a project has both global and local agents with the same name, the local one wins.
-
-## Limitations
-
-- Workflow stages are prompt-enforced unless a deterministic plugin is added.
-- Retry counters depend on orchestrator session state.
-- `/feature` requires the interactive OpenCode TUI; `opencode run` does not execute project slash commands.
-- The loop handles one primary task at a time.
-- Persistent queues, backlog processing, and unattended batch runs are outside this package.
-
-## Uninstall
-
-```bash
-bash scripts/uninstall.sh
-```
-
-This removes the `OPENCODE_CONFIG_DIR` export from your shell config. It does not delete the package or project AGENTS.md files.
-
-## Commands
+## 🎯 Commands
 
 | Command | Description |
 |---------|-------------|
-| `/feature <desc>` | Run the full agent workflow |
-| `/loop <desc>` | Run the `agent_loop` custom tool through the orchestrator |
-| `/loop-init` | Initialize a repository for the agent loop |
+| `/feature <description>` | Run the full agent workflow for a new feature |
+| `/loop <description>` | Run the `agent_loop` custom tool through the orchestrator |
+| `/loop-init` | Initialize a repository for agent-loop automation |
 
-## Project structure
+---
+
+## 📁 Project Structure
 
 ```
 opencode-agent-loop/
-├── agents/               Agent definitions (6 active + 3 disabled Qwythos)
-├── commands/             Slash commands
-├── config/               Free-first routing configuration
-│   ├── model-registry.json   79 models from 5 providers with scores
-│   ├── free-first-pools.json Ordered model pools per role
-│   └── free-first-config.json Global failover, cooldown, privacy settings
-├── lib/                  Routing library modules
-├── runtime/              Node runtime controller, failover entry, OpenCode adapter
-├── .opencode/            Project-local plugin and /loop command
-│   ├── failover-handler.mjs  Retry, cooldown, checkpointing
-│   ├── paid-fallback.mjs     Paid escalation controller
-│   ├── privacy-classifier.mjs Task sensitivity classification
-│   └── ntfy-enhancer.mjs     Paid-fallback notifications
-├── skills/               Reusable skills
-├── templates/            Project template files
-├── tests/                Automated routing tests
-│   ├── routing-tests.mjs     24 mocked failover scenarios
-│   ├── runtime-tests.mjs     Production runtime/failover scenarios
-│   ├── tool-integration-tests.mjs  agent_loop tool to runtime smoke
-│   └── bypass-detection.mjs  Fails direct production OpenCode invocations
-├── scripts/              Installation, validation, activation
+├── agents/              # Agent definitions (6 active agents)
+├── commands/            # Slash commands for OpenCode TUI
+├── config/              # Model routing configuration
+│   ├── model-registry.json    # 79 models with capability scores
+│   ├── free-first-pools.json # Ordered model pools per role
+│   └── free-first-config.json # Global failover settings
+├── lib/                 # Routing library modules
+├── runtime/             # Node runtime controller and failover entry
+├── .opencode/          # Project-local plugin and /loop command
+│   ├── failover-handler.mjs    # Retry, cooldown, checkpointing
+│   ├── paid-fallback.mjs        # Paid escalation controller
+│   ├── privacy-classifier.mjs    # Task sensitivity classification
+│   └── ntfy-enhancer.mjs       # Paid-fallback notifications
+├── skills/             # Reusable skills
+├── templates/          # Project template files
+├── docs/               # Documentation
+│   ├── agent-roles.md
+│   ├── configuration.md
+│   ├── safety-model.md
+│   └── tui-agent-loop-integration.md
+├── tests/              # Automated tests
+│   ├── routing-tests.mjs         # Failover scenario tests
+│   ├── runtime-tests.mjs         # Production runtime tests
+│   ├── tool-integration-tests.mjs # agent_loop tool integration
+│   └── bypass-detection.mjs     # Direct production tests
+├── scripts/            # Utility scripts
 │   ├── install.sh
 │   ├── uninstall.sh
 │   ├── validate.sh
 │   ├── smoke-test.sh
-│   └── activation-gate.sh    Pre-activation checks
-├── opencode.json         Global configuration
-├── README.md             This file
-├── CHANGELOG.md          Release history
-└── LICENSE               License
+│   └── activation-gate.sh
+├── opencode.json       # Global configuration
+├── CHANGELOG.md        # Release history
+├── CONTRIBUTING.md     # Contribution guidelines
+├── SECURITY.md         # Security reporting policy
+└── LICENSE             # MIT License
 ```
 
-## License
+---
 
-MIT
+## 📖 Documentation
+
+
+- [Agent Roles](docs/agent-roles.md) - Detailed descriptions of each agent's responsibilities
+- [Configuration Guide](docs/configuration.md) - How to configure model routing and failover
+- [Safety Model](docs/safety-model.md) - Safety features and protections
+- [TUI Integration](docs/tui-agent-loop-integration.md) - How the agent_loop tool integrates with OpenCode TUI
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to report bugs, suggest features, and submit pull requests.
+
+
+---
+
+## 🛡️ Security
+
+
+If you discover a security vulnerability, please review our [SECURITY.md](SECURITY.md) file for reporting instructions.
+
+
+---
+
+## 📜 License
+
+
+Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
+
+
+---
+
+
+*This is a pre-release version. Features and APIs may change without backward compatibility guarantees until v1.0.0.*
