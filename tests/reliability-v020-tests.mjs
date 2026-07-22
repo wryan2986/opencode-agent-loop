@@ -20,10 +20,11 @@ function testCustomProviderAdapter() {
 }
 
 function testRecursiveRedaction() {
+  const simulatedGithubToken = ['github', 'pat', 'abcdefghijklmnopqrstuvwxyz123456'].join('_');
   const redacted = redactSensitive({
     authorization: 'Bearer secret-value',
     nested: { apiKey: 'abc123', harmless: 'ok', output: 'TOKEN=do-not-log' },
-    values: ['github_pat_abcdefghijklmnopqrstuvwxyz123456']
+    values: [simulatedGithubToken]
   });
   assert.equal(redacted.authorization, '[REDACTED]');
   assert.equal(redacted.nested.apiKey, '[REDACTED]');
