@@ -1,0 +1,31 @@
+name: Apply provider retry integration
+
+on:
+  push:
+    branches: [release/v0.2.0-reliability]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/v0.2.0-reliability
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: node scripts/apply-provider-retry.mjs
+      - run: npm ci
+      - run: npm run validate
+      - run: |
+          git add -A
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat: support provider-specific retry policies"
+          git push origin HEAD:release/v0.2.0-reliability
