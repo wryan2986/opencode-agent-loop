@@ -33,7 +33,9 @@
     ],
     "local_only_task_classifications": [
       "trusted-provider-only"
-    ]
+    ],
+    "paid_fallback_log_path": ".opencode/agent-loop-state/paid-escalations.jsonl",
+    "paid_fallback_state_path": ".opencode/agent-loop-state/paid-fallback-state.json"
   },
   "cooldowns": {
     "single_rate_limit_minutes": 10,

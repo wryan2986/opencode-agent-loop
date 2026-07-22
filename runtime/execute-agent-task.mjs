@@ -175,7 +175,7 @@ export async function executeAgentTask({
   const failover = new FailoverHandler(configPath, poolsPath);
   await failover.loadConfig();
   await failover.loadPools();
-  const paidFallback = new PaidFallbackController(configPath);
+  const paidFallback = new PaidFallbackController(configPath, { cwd });
   const attemptDetails = [];
   const stepStartedAt = new Date().toISOString();
   events.emit('stage.started', { stage: budgetStep, role, data: { agent, poolName, retryLimit, candidateModels: models.map(model => model.modelId) } });

@@ -72,6 +72,10 @@ A snapshot reports limits, remaining allowance, token and cost usage, workflow c
 
 The runtime limits parent orchestration with a workflow-call ceiling and a reduced maximum turn count. OpenCode does not currently expose parent-session token and cost events to this plugin, so precise parent-model tokens and dollars are not included. Results state `parentModelUsageIncluded: false` rather than claiming a complete task-cost total.
 
+## Paid fallback audit state
+
+Paid fallback selections and call counters are persisted per project under `.opencode/agent-loop-state/`. The audit log contains only model, role, failure-code, and outcome metadata; it excludes prompts and credentials. Persistent counters prevent a process restart from resetting per-task or global paid-call ceilings.
+
 ## Structured events
 
 The default append-only stream is:
