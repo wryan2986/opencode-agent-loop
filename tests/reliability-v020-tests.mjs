@@ -20,6 +20,21 @@ function testCustomProviderAdapter() {
   assert.equal(resolveProviderAdapter('anything/model', 'acme-cloud').timeoutKey, 'acme-slow');
 }
 
+function testProviderRetryPolicy() {
+  const local = resolveProviderAdapter('ollama-9b-local');
+  const global = {
+    max_retries: 4,
+    retryable_http_codes: [429, 500],
+    retryable_errors: ['ETIMEDOUT'],
+    non_retryable_errors: ['BUDGET_EXCEEDED']
+  };
+  const policy = local.retryPolicy(global, {});
+  assert.equal(policy.maxRetries, 1);
+  assert.equal(local.shouldRetry({ code: 'ETIMEDOUT' }, global), true);
+  assert.equal(local.shouldRetry({ code: 'BUDGET_EXCEEDED' }, global), false);
+  assert.equal(local.shouldRetry({ statusCode: 418 }, global), null);
+}
+
 function testRecursiveRedaction() {
   const simulatedGithubToken = ['github', 'pat', 'abcdefghijklmnopqrstuvwxyz123456'].join('_');
   const redacted = redactSensitive({
@@ -120,6 +135,7 @@ async function testSameModelRetryBeforeFailover() {
 const tests = [
   testLocalProviderResolution,
   testCustomProviderAdapter,
+  testProviderRetryPolicy,
   testRecursiveRedaction,
   testStructuredEvents,
   testPersistentBudgetStore,
