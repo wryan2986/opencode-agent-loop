@@ -102,3 +102,35 @@ jobs:
             exit 1
           fi
           echo "No committed environment files found."
+
+  apply-retry-default:
+    if: github.event_name == 'pull_request' && github.head_ref == 'release/v0.2.0-reliability' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/v0.2.0-reliability
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply configured retry defaults
+        run: node scripts/apply-retry-default.mjs
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate migrated tree
+        run: npm run validate
+      - name: Commit migrated files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix: use configured retry defaults"
+          git push origin HEAD:release/v0.2.0-reliability
