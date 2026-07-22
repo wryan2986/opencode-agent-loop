@@ -65,9 +65,9 @@ jobs:
         working-directory: upstream-opencode
         run: bun install --frozen-lockfile
 
-      - name: Build standalone OpenCode
+      - name: Build native standalone OpenCode
         working-directory: upstream-opencode
-        run: bun ./packages/opencode/script/build.ts --single
+        run: bun ./packages/opencode/script/build.ts --single --skip-install --skip-embed-web-ui
 
       - name: Verify patched source contracts
         run: node scripts/check-opencode-patch-contract.mjs upstream-opencode
