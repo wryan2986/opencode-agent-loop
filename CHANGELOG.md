@@ -6,6 +6,10 @@
 
 - Added configurable per-task token and cost budgets with live OpenCode usage tracking, model-registry pricing estimates, failover interruption, and structured budget output. Closes #4.
 
+### Fixed
+
+- Treat local-unmetered models as zero-cost and account for a final usage event even when the JSON stream has no trailing newline.
+
 ## [0.1.1] - 2026-07-22
 
 ### Fixed
