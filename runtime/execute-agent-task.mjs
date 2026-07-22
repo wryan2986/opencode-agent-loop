@@ -124,7 +124,7 @@ export async function executeAgentTask({
   progressCallback,
   budgetTaskId = taskId,
   budgetStep = role,
-  maxRetries,
+  maxRetries = 0,
   eventLogger
 }) {
   if (!role) throw new Error('executeAgentTask requires role');
