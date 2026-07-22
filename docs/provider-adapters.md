@@ -37,3 +37,7 @@ registerProviderAdapter(new AcmeAdapter());
 See `examples/provider-adapter.mjs` for a complete example.
 
 Add the provider's timeout to `provider_timeouts_ms` and `smoke_test_provider_timeout_ms`. Model entries remain in `config/model-registry.json`; role order remains in `config/free-first-pools.json`.
+
+## Provider-specific retry policy
+
+Use the optional `provider_retry` map in `config/free-first-config.json` to cap retries or override retryable and non-retryable codes for one provider. The adapter combines that policy with the global retry defaults. A provider-specific cap can reduce, but cannot increase, the caller's `maxRetries` value.

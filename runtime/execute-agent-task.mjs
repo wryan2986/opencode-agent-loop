@@ -8,6 +8,7 @@ import { runOpenCodeWorker, resolveTimeoutMs } from './opencode-worker-runner.mj
 import { reapExpiredCooldowns } from '../lib/cooldown-manager.mjs';
 import { BudgetTracker } from '../lib/budget-manager.mjs';
 import { AgentLoopEventLogger, redactSensitive } from '../lib/event-log.mjs';
+import { resolveProviderAdapter } from '../lib/provider-adapters.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, '..');
@@ -203,8 +204,14 @@ export async function executeAgentTask({
       const workerPrompt = `${prompt}${checkpoint}`;
       const modelLabel = modelId.split('/').pop();
       let finalInvocation = null;
+      const providerAdapter = resolveProviderAdapter(modelId);
+      const providerPolicy = freeFirstConfig?.provider_retry?.[providerAdapter.id] || {};
+      const adapterRetryPolicy = providerAdapter.retryPolicy(freeFirstConfig.retry || {}, providerPolicy);
+      const modelRetryLimit = Number.isInteger(adapterRetryPolicy.maxRetries)
+        ? Math.min(retryLimit, Math.max(0, adapterRetryPolicy.maxRetries))
+        : retryLimit;
 
-      for (let retryIndex = 0; retryIndex <= retryLimit; retryIndex += 1) {
+      for (let retryIndex = 0; retryIndex <= modelRetryLimit; retryIndex += 1) {
         if (!budgetTracker.canContinue()) {
           const budget = budgetTracker.snapshot();
           return { success: false, code: 'BUDGET_EXCEEDED', budgetExceeded: true, budget };
@@ -296,7 +303,9 @@ export async function executeAgentTask({
 
         if (invocation.success || invocation.budgetExceeded || invocation.code === 'BUDGET_EXCEEDED') break;
         const classification = failover.classifyFailure(invocation);
-        if (!classification.retryable || retryIndex >= retryLimit) break;
+        const adapterDecision = providerAdapter.shouldRetry(invocation, freeFirstConfig.retry || {}, providerPolicy);
+        const retryable = adapterDecision ?? classification.retryable;
+        if (!retryable || retryIndex >= modelRetryLimit) break;
         const delayMs = failover.getBackoffDelay(retryIndex);
         events.emit('model.retry.scheduled', { stage: budgetStep, role, modelId, data: { retryIndex: retryIndex + 1, delayMs, reason: classification.reason } });
         await sleep(delayMs, signal);
