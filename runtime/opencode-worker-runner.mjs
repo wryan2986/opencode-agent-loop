@@ -1,7 +1,11 @@
 import { spawn } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { normalizeTokenUsage } from '../lib/budget-manager.mjs';
+import {
+  deriveProviderFromModel as deriveProvider,
+  providerTimeoutKey,
+  resolveProviderAdapter
+} from '../lib/provider-adapters.mjs';
 
 const activeChildren = new Set();
 
@@ -15,34 +19,40 @@ export function terminateActiveWorkers(signal = 'SIGTERM') {
   }
 }
 
-export function extractProviderError({ stdout = '', stderr = '', exitCode = 0 } = {}) {
+export function extractProviderError({ stdout = '', stderr = '', exitCode = 0, model } = {}) {
   const combined = `${stderr}\n${stdout}`;
-  const statusMatch = combined.match(/\b(410|429|500|502|503|504|401|403|404)\b/);
-  const codeMatch = combined.match(/\b(ECONNRESET|ETIMEDOUT|ECONNREFUSED|EPIPE|UNAUTHORIZED|FORBIDDEN)\b/);
-  const providerMatch = combined.match(/provider[\s:]+([a-z0-9._-]+)/i);
-  const modelMatch = combined.match(/model[\s:]+([a-z0-9._/-]+(?::free)?)/i);
-  const sessionMatch = combined.match(/session(?:ID|Id| id)?[\s:=]+([a-zA-Z0-9_-]+)/);
+  const providerMatch = combined.match(/provider(?:ID|Id| id)?[\s:=]+([a-z0-9._-]+)/i);
+  const modelMatch = combined.match(/model(?:ID|Id| id)?[\s:=]+([a-z0-9._/-]+(?::free)?)/i);
+  const adapter = resolveProviderAdapter(model || modelMatch?.[1], providerMatch?.[1]);
+  const normalized = adapter.normalizeError({ stdout, stderr, exitCode });
   return {
-    statusCode: statusMatch ? Number(statusMatch[1]) : undefined,
-    code: codeMatch ? codeMatch[1] : undefined,
-    provider: providerMatch ? providerMatch[1] : undefined,
-    model: modelMatch ? modelMatch[1] : undefined,
-    sessionId: sessionMatch ? sessionMatch[1] : undefined,
+    ...normalized,
+    provider: providerMatch?.[1] || normalized.provider,
+    model: modelMatch?.[1] || model,
     message: combined.slice(0, 2000),
     exitCode
   };
 }
 
 export function deriveProviderFromModel(model) {
-  if (!model || typeof model !== 'string') return 'unknown';
-  const parts = model.split('/');
-  return parts.length >= 2 ? parts[0] : 'unknown';
+  return deriveProvider(model);
+}
+
+export function parseExecutableArgs(value = process.env.AGENT_LOOP_WORKER_EXECUTABLE_ARGS) {
+  if (Array.isArray(value)) return value.map(String);
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    throw new Error('AGENT_LOOP_WORKER_EXECUTABLE_ARGS must be a JSON array of strings');
+  }
 }
 
 export function resolveTimeoutMs({ model, timeoutMs, providerTimeouts = {}, latencyTimeoutMapping = {} }) {
   if (timeoutMs != null && timeoutMs > 0) return timeoutMs;
-  const provider = deriveProviderFromModel(model);
-  const providerTier = providerTimeouts[provider];
+  const timeoutKey = providerTimeoutKey(model);
+  const providerTier = providerTimeouts[timeoutKey];
   if (providerTier != null && providerTier > 0) return providerTier;
   const fallback = providerTimeouts.default;
   if (fallback != null && fallback > 0) return fallback;
@@ -83,12 +93,12 @@ function addUsage(target, usage) {
   target.total += usage.total;
 }
 
-function extractSessionId(stdout, stderr) {
+function extractSessionId(stdout, stderr, model) {
   for (const event of parseJsonEvents(stdout)) {
     const id = event.sessionID || event.sessionId || event.session?.id || event.properties?.sessionID;
     if (id) return id;
   }
-  return extractProviderError({ stdout, stderr }).sessionId;
+  return extractProviderError({ stdout, stderr, model }).sessionId;
 }
 
 export async function runOpenCodeWorker({
@@ -100,6 +110,7 @@ export async function runOpenCodeWorker({
   env = {},
   signal,
   executable = process.env.AGENT_LOOP_WORKER_EXECUTABLE || 'opencode',
+  executableArgs,
   sessionId,
   continueSession = false,
   title,
@@ -115,8 +126,9 @@ export async function runOpenCodeWorker({
   if (!prompt) throw new Error('runOpenCodeWorker requires prompt');
 
   const effectiveTimeoutMs = resolveTimeoutMs({ model, timeoutMs, providerTimeouts, latencyTimeoutMapping });
-
+  const prefixArgs = parseExecutableArgs(executableArgs);
   const args = [
+    ...prefixArgs,
     'run',
     '--agent', agent,
     '--model', model,
@@ -135,13 +147,7 @@ export async function runOpenCodeWorker({
     AGENT_LOOP_CHILD: '1'
   };
 
-  // Ensure executable is absolute
-  if (executable === 'opencode' && !process.env.AGENT_LOOP_WORKER_EXECUTABLE) {
-    executable = process.env.AGENT_LOOP_WORKER_EXECUTABLE || '/usr/local/bin/opencode';
-  }
-  if (!cwd || cwd === '') {
-    cwd = process.env.AGENT_LOOP_PROJECT_DIR || process.cwd();
-  }
+  if (!cwd) cwd = process.env.AGENT_LOOP_PROJECT_DIR || process.cwd();
 
   return await new Promise((resolve) => {
     const child = spawn(executable, args, {
@@ -196,16 +202,12 @@ export async function runOpenCodeWorker({
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed.startsWith('{')) continue;
-        try {
-          recordUsageEvent(JSON.parse(trimmed));
-        } catch {
-          // Ignore non-JSON output mixed into the stream.
-        }
+        try { recordUsageEvent(JSON.parse(trimmed)); }
+        catch { /* Ignore non-JSON output mixed into the stream. */ }
       }
       if (flush && tail.trim().startsWith('{')) {
-        try {
-          recordUsageEvent(JSON.parse(tail.trim()));
-        } catch {}
+        try { recordUsageEvent(JSON.parse(tail.trim())); }
+        catch {}
       }
     }
 
@@ -250,7 +252,6 @@ export async function runOpenCodeWorker({
       stdout += text;
       consumeJsonOutput(text);
       lastActivityAt = Date.now();
-      // Throttled tail callback for TUI metadata
       if (stdoutTailCallback) {
         const now = Date.now();
         if (now - lastTailTs >= TAIL_THROTTLE_MS) {
@@ -264,16 +265,16 @@ export async function runOpenCodeWorker({
       lastActivityAt = Date.now();
     });
 
-    // Periodic progress flush
     const progressInterval = setInterval(flushProgress, 5000);
 
     child.on('error', error => {
       clearTimeout(timeout);
       clearInterval(progressInterval);
       activeChildren.delete(child);
+      if (signal) signal.removeEventListener?.('abort', abort);
       flushProgress();
-      const providerError = extractProviderError({ stdout, stderr: `${stderr}\n${error.message}`, exitCode: -1 });
       consumeJsonOutput('', true);
+      const providerError = extractProviderError({ stdout, stderr: `${stderr}\n${error.message}`, exitCode: -1, model });
       resolve({
         success: false, stdout, stderr, exitCode: -1, signal: null, error,
         timedOut: false, lastActivityAt,
@@ -290,8 +291,8 @@ export async function runOpenCodeWorker({
       if (signal) signal.removeEventListener?.('abort', abort);
       flushProgress();
       consumeJsonOutput('', true);
-      const providerError = extractProviderError({ stdout, stderr, exitCode });
-      const session = extractSessionId(stdout, stderr);
+      const providerError = extractProviderError({ stdout, stderr, exitCode, model });
+      const session = extractSessionId(stdout, stderr, model);
       resolve({
         success: exitCode === 0 && !timedOut && !budgetExceeded,
         stdout,

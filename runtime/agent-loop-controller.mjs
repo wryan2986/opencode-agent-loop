@@ -1,9 +1,10 @@
 import { executeAgentTask, resolvePoolName } from './execute-agent-task.mjs';
 import { assertCanStartLoop, getCurrentDepth } from './recursion-guard.mjs';
 import { loadPoolConfig, normalizePoolConfig, isModelCoolingDown } from '../lib/pool-normalizer.mjs';
-import { runSmokeTest, filterResponsiveModels } from '../lib/smoke-test.mjs';
+import { runSmokeTest } from '../lib/smoke-test.mjs';
 import { reapExpiredCooldowns, filterRetiredModels, loadRegistry } from '../lib/cooldown-manager.mjs';
 import { BudgetTracker } from '../lib/budget-manager.mjs';
+import { AgentLoopEventLogger, defaultEventLogPath } from '../lib/event-log.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,25 +16,26 @@ const DEFAULT_POOLS_PATH = resolve(PACKAGE_ROOT, 'config/free-first-pools.json')
 const DEFAULT_REGISTRY_PATH = resolve(PACKAGE_ROOT, 'config/model-registry.json');
 
 function loadConfig(path) {
-  try { return JSON.parse(readFileSync(path, 'utf-8')); } catch { return {}; }
+  try { return JSON.parse(readFileSync(path, 'utf-8')); }
+  catch { return {}; }
 }
 
 function yieldToEventLoop() {
-  return new Promise(resolve => setImmediate(resolve));
+  return new Promise(resolvePromise => setImmediate(resolvePromise));
 }
 
-async function updateProgress(pc, title, metadata) {
-  if (!pc) return;
+async function updateProgress(callback, title, metadata) {
+  if (!callback) return;
   try {
-    pc({ title, metadata: { ...metadata, _t: Date.now() } });
+    callback({ title, metadata: { ...metadata, _t: Date.now() } });
     await yieldToEventLoop();
   } catch {}
 }
 
 const MODE_STEPS = {
-  smoke:  { role: 'builder', agent: 'build-worker', label: 'smoke' },
-  build:  { role: 'builder', agent: 'build-worker', label: 'build' },
-  test:   { role: 'test', agent: 'test', label: 'test' },
+  smoke: { role: 'builder', agent: 'build-worker', label: 'smoke' },
+  build: { role: 'builder', agent: 'build-worker', label: 'build' },
+  test: { role: 'test', agent: 'test', label: 'test' },
   review: { role: 'reviewer', agent: 'review', label: 'review' },
   escalate: { role: 'escalation', agent: 'escalation', label: 'escalate' }
 };
@@ -52,10 +54,30 @@ function classifyStep(label, result) {
   return 'passed';
 }
 
+function budgetFailure({ taskId, budget, smokeResults = null, eventLogPath = '' }) {
+  return {
+    status: 'failed',
+    code: 'BUDGET_EXCEEDED',
+    taskId,
+    summary: budget.exceededReasons.join('; ') || 'Task budget exceeded.',
+    successfulModel: null,
+    attemptedModels: [],
+    changedFiles: [],
+    smokeResults,
+    budget,
+    eventLogPath,
+    tests: { status: 'not-run', commands: [] },
+    review: { status: 'not-run' },
+    requiresUserInput: false,
+    logPath: '',
+    steps: [{ step: 'budget', status: 'failed', code: 'BUDGET_EXCEEDED', budget }]
+  };
+}
+
 export async function runAgentLoop({
   task,
   mode = 'build',
-  maxRetries = 0,
+  maxRetries,
   cwd = process.cwd(),
   parentSessionId,
   metadata = {},
@@ -80,25 +102,43 @@ export async function runAgentLoop({
   }
 
   const config = loadConfig(DEFAULT_CONFIG_PATH);
+  const configuredRetryLimit = Number.isInteger(config?.retry?.max_retries) ? config.retry.max_retries : 0;
+  const effectiveMaxRetries = Number.isInteger(maxRetries)
+    ? Math.max(0, Math.min(maxRetries, 5))
+    : Math.max(0, Math.min(configuredRetryLimit, 5));
   const smokeTestEnabled = config?.general?.smoke_test_enabled !== false;
+  const events = new AgentLoopEventLogger({
+    taskId,
+    cwd,
+    enabled: config?.events?.enabled !== false,
+    path: defaultEventLogPath(cwd, config?.events?.path || '.opencode/agent-loop-state/events.jsonl')
+  });
   const budgetTracker = BudgetTracker.fromFiles({
     taskId,
-    step: 'smoke',
+    step: mode,
     configPath: DEFAULT_CONFIG_PATH,
-    registryPath: DEFAULT_REGISTRY_PATH
+    registryPath: DEFAULT_REGISTRY_PATH,
+    cwd
   });
-  const onSmokeUsage = ({ modelId, usage, reportedCostUsd }) => budgetTracker.recordUsage({
-    modelId,
-    usage,
-    reportedCostUsd,
-    step: 'smoke'
-  });
+  const callBudget = budgetTracker.recordWorkflowCall(mode);
+  events.emit('workflow.call', { stage: mode, data: { mode, maxRetries: effectiveMaxRetries, budget: callBudget } });
+  if (!budgetTracker.canContinue()) {
+    events.emit('budget.exceeded', { stage: mode, data: { budget: callBudget } });
+    return budgetFailure({ taskId, budget: callBudget, eventLogPath: events.path });
+  }
 
-  // --- Smoke test mode: test models and return results ---
+  const onSmokeUsage = ({ modelId, usage, reportedCostUsd }) => {
+    const budget = budgetTracker.recordUsage({ modelId, usage, reportedCostUsd, step: 'smoke' });
+    events.emit(budget.exceeded ? 'budget.exceeded' : 'budget.updated', { stage: 'smoke', modelId, data: { usage, budget } });
+    return budget;
+  };
+
+  events.emit('stage.started', { stage: mode, data: { mode, taskLength: task.length } });
+
   if (mode === 'smoke') {
     reapExpiredCooldowns();
-    const poolConf = loadPoolConfig(DEFAULT_POOLS_PATH);
-    const normalized = normalizePoolConfig(poolConf, { role: resolvePoolName('builder') });
+    const poolConfig = loadPoolConfig(DEFAULT_POOLS_PATH);
+    const normalized = normalizePoolConfig(poolConfig, { role: resolvePoolName('builder') });
     const registry = loadRegistry();
     const freeModels = [];
     for (const tier of ['freeCloud', 'openRouterFree', 'trialCreditModels']) {
@@ -106,9 +146,8 @@ export async function runAgentLoop({
         if (!isModelCoolingDown(normalized, modelId)) freeModels.push({ modelId, tier });
       }
     }
-    // Filter out retired models so smoke tests don't waste call on them
-    const activeModels = filterRetiredModels(freeModels.map(m => m.modelId), registry);
-    const filteredModels = freeModels.filter(m => activeModels.includes(m.modelId));
+    const activeModels = filterRetiredModels(freeModels.map(item => item.modelId), registry);
+    const filteredModels = freeModels.filter(item => activeModels.includes(item.modelId));
     let smokeResults = null;
     if (filteredModels.length > 0) {
       await updateProgress(progressCallback, 'Smoke testing free models...', { models: filteredModels.length, status: 'smoke-test' });
@@ -117,44 +156,48 @@ export async function runAgentLoop({
         providerTimeouts: config?.provider_timeouts_ms || {},
         smokeTestTimeoutMs: config?.general?.smoke_test_default_timeout_ms || 30000,
         smokeTestProviderTimeouts: config?.smoke_test_provider_timeout_ms || {},
-        cwd, env: { ...env, AGENT_LOOP_DEPTH: String(getCurrentDepth() + 1) }, signal, progressCallback, onUsage: onSmokeUsage
+        cwd,
+        env: { ...env, AGENT_LOOP_DEPTH: String(getCurrentDepth() + 1) },
+        signal,
+        progressCallback,
+        onUsage: onSmokeUsage
       });
+      events.emit('smoke.completed', { stage: 'smoke', data: { responsive: smokeResults.responsive, unresponsive: smokeResults.unresponsive } });
       await updateProgress(progressCallback, `Smoke test: ${smokeResults.responsive.length}/${smokeResults.responsive.length + smokeResults.unresponsive.length} responsive`, { smoke: { responsive: smokeResults.responsive, unresponsive: smokeResults.unresponsive }, status: 'smoke-done' });
     }
     if (smokeResults?.budgetExceeded || !budgetTracker.canContinue()) {
       const budget = budgetTracker.snapshot();
-      return {
-        status: 'failed', code: 'BUDGET_EXCEEDED', taskId,
-        summary: budget.exceededReasons.join('; ') || 'Task budget exceeded during smoke test.',
-        successfulModel: null, attemptedModels: [], changedFiles: [],
-        smokeResults, budget,
-        tests: { status: 'not-run', commands: [] }, review: { status: 'not-run' },
-        requiresUserInput: false, logPath: '', steps: [{ step: 'smoke', status: 'failed', code: 'BUDGET_EXCEEDED', budget }]
-      };
+      events.emit('budget.exceeded', { stage: 'smoke', data: { budget } });
+      return budgetFailure({ taskId, budget, smokeResults, eventLogPath: events.path });
     }
-    const hasResponsive = smokeResults && smokeResults.responsive.length > 0;
+    const hasResponsive = Boolean(smokeResults?.responsive.length);
+    events.emit(hasResponsive ? 'stage.completed' : 'stage.failed', { stage: 'smoke', data: { responsive: smokeResults?.responsive || [], unresponsive: smokeResults?.unresponsive || [] } });
     return {
       status: hasResponsive ? 'completed' : 'failed',
-      taskId, summary: hasResponsive ? `Smoke test: ${smokeResults.responsive.length} responsive models` : 'All providers unresponsive',
-      successfulModel: null, attemptedModels: [], changedFiles: [],
+      taskId,
+      summary: hasResponsive ? `Smoke test: ${smokeResults.responsive.length} responsive models` : 'All providers unresponsive',
+      successfulModel: null,
+      attemptedModels: [],
+      changedFiles: [],
       smokeResults: smokeResults ? { responsive: smokeResults.responsive, unresponsive: smokeResults.unresponsive } : null,
-      tests: { status: 'not-run', commands: [] }, review: { status: 'not-run' },
-      requiresUserInput: !hasResponsive, logPath: '',
+      tests: { status: 'not-run', commands: [] },
+      review: { status: 'not-run' },
+      requiresUserInput: !hasResponsive,
+      logPath: '',
+      eventLogPath: events.path,
       budget: budgetTracker.snapshot(),
-      steps: [{ step: 'smoke', status: hasResponsive ? 'completed' : 'failed', attemptedModels: (smokeResults?.responsive || []).map(r => r.modelId), smokeResults: { responsive: smokeResults?.responsive || [], unresponsive: smokeResults?.unresponsive || [] }, budget: budgetTracker.snapshot() }]
+      steps: [{ step: 'smoke', status: hasResponsive ? 'completed' : 'failed', attemptedModels: (smokeResults?.responsive || []).map(item => item.modelId), smokeResults: { responsive: smokeResults?.responsive || [], unresponsive: smokeResults?.unresponsive || [] }, budget: budgetTracker.snapshot() }]
     };
   }
 
-  // --- Regular mode: run smoke test if no forceModels provided ---
   let smokeResults = null;
   if (Array.isArray(forceModels) && forceModels.length > 0) {
-    // forceModels from the caller are pre-filtered; trust caller
-    smokeResults = { responsive: forceModels.map(id => ({ modelId: id })), unresponsive: [] };
+    smokeResults = { responsive: forceModels.map(modelId => ({ modelId })), unresponsive: [] };
   } else if (smokeTestEnabled) {
     reapExpiredCooldowns();
-    const poolConf = loadPoolConfig(DEFAULT_POOLS_PATH);
+    const poolConfig = loadPoolConfig(DEFAULT_POOLS_PATH);
     const firstPool = resolvePoolName(MODE_STEPS[mode].role);
-    const normalized = normalizePoolConfig(poolConf, { role: firstPool });
+    const normalized = normalizePoolConfig(poolConfig, { role: firstPool });
     const registry = loadRegistry();
     const freeModels = [];
     for (const tier of ['freeCloud', 'openRouterFree', 'trialCreditModels']) {
@@ -162,67 +205,93 @@ export async function runAgentLoop({
         if (!isModelCoolingDown(normalized, modelId)) freeModels.push({ modelId, tier });
       }
     }
-    // Filter out retired models
-    const activeIds = filterRetiredModels(freeModels.map(m => m.modelId), registry);
-    const filteredModels = freeModels.filter(m => activeIds.includes(m.modelId));
+    const activeIds = filterRetiredModels(freeModels.map(item => item.modelId), registry);
+    const filteredModels = freeModels.filter(item => activeIds.includes(item.modelId));
     if (filteredModels.length > 0) {
       await updateProgress(progressCallback, 'Smoke testing free models...', { models: filteredModels.length, status: 'smoke-test' });
       smokeResults = await runSmokeTest({
-        models: filteredModels, providerTimeouts: config?.provider_timeouts_ms || {},
+        models: filteredModels,
+        providerTimeouts: config?.provider_timeouts_ms || {},
         smokeTestTimeoutMs: config?.general?.smoke_test_default_timeout_ms || 30000,
         smokeTestProviderTimeouts: config?.smoke_test_provider_timeout_ms || {},
-        cwd, env: { ...env, AGENT_LOOP_DEPTH: String(getCurrentDepth() + 1) }, signal, progressCallback, onUsage: onSmokeUsage
+        cwd,
+        env: { ...env, AGENT_LOOP_DEPTH: String(getCurrentDepth() + 1) },
+        signal,
+        progressCallback,
+        onUsage: onSmokeUsage
       });
+      events.emit('smoke.completed', { stage: mode, data: { responsive: smokeResults.responsive, unresponsive: smokeResults.unresponsive } });
       await updateProgress(progressCallback, `Smoke test: ${smokeResults.responsive.length}/${smokeResults.responsive.length + smokeResults.unresponsive.length} responsive`, { smoke: { responsive: smokeResults.responsive, unresponsive: smokeResults.unresponsive }, status: 'smoke-done' });
     }
     if (smokeResults?.budgetExceeded || !budgetTracker.canContinue()) {
       const budget = budgetTracker.snapshot();
-      return { status: 'failed', code: 'BUDGET_EXCEEDED', taskId, summary: budget.exceededReasons.join('; ') || 'Task budget exceeded during smoke test.', successfulModel: null, attemptedModels: [], changedFiles: [], smokeResults, budget, tests: { status: 'not-run', commands: [] }, review: { status: 'not-run' }, requiresUserInput: false, logPath: '', steps: [{ step: 'smoke', status: 'failed', code: 'BUDGET_EXCEEDED', budget }] };
+      events.emit('budget.exceeded', { stage: mode, data: { budget } });
+      return budgetFailure({ taskId, budget, smokeResults, eventLogPath: events.path });
     }
     if (smokeResults && smokeResults.responsive.length === 0 && smokeResults.unresponsive.length > 0) {
       await updateProgress(progressCallback, 'All providers unresponsive', { status: 'blocked' });
-      return { status: 'failed', taskId, summary: 'All free providers are unresponsive.', successfulModel: null, attemptedModels: [], changedFiles: [], smokeResults: { responsive: [], unresponsive: smokeResults.unresponsive }, tests: { status: 'not-run', commands: [] }, review: { status: 'not-run' }, requiresUserInput: false, logPath: '', steps: [] };
+      events.emit('stage.blocked', { stage: mode, data: { code: 'ALL_PROVIDERS_UNRESPONSIVE', smokeResults } });
+      return {
+        status: 'failed', taskId, summary: 'All free providers are unresponsive.',
+        successfulModel: null, attemptedModels: [], changedFiles: [],
+        smokeResults: { responsive: [], unresponsive: smokeResults.unresponsive },
+        tests: { status: 'not-run', commands: [] }, review: { status: 'not-run' },
+        requiresUserInput: false, logPath: '', eventLogPath: events.path,
+        budget: budgetTracker.snapshot(), steps: []
+      };
     }
   }
 
-  // --- Execute single step ---
   const step = MODE_STEPS[mode];
   const prompt = [
-    `User request:\n${task}`, '', `Mode: ${mode}`, `Step: ${step.label}`, `Task ID: ${taskId}`, '',
+    `User request:\n${task}`,
+    '',
+    `Mode: ${mode}`,
+    `Step: ${step.label}`,
+    `Task ID: ${taskId}`,
+    '',
     'Inspect the repository state before changing anything. Return a concise structured result with evidence. Do not call the agent_loop tool.'
   ].join('\n');
-
   await updateProgress(progressCallback, `${step.label} step...`, { step: step.label, status: 'running' });
 
   const executeOptions = {
-    taskId: `${taskId}-${step.label}`, role: step.role, agent: step.agent, prompt,
-    cwd, parentSessionId, metadata, timeoutMs, signal, workerAdapter,
+    taskId: `${taskId}-${step.label}`,
+    role: step.role,
+    agent: step.agent,
+    prompt,
+    cwd,
+    parentSessionId,
+    metadata,
+    timeoutMs,
+    signal,
+    workerAdapter,
     env: { ...env, AGENT_LOOP_DEPTH: String(getCurrentDepth() + 1) },
     progressCallback,
     budgetTaskId: taskId,
     budgetStep: step.label,
-    registryPath: DEFAULT_REGISTRY_PATH
+    registryPath: DEFAULT_REGISTRY_PATH,
+    maxRetries: effectiveMaxRetries,
+    eventLogger: events
   };
-  if (smokeResults && smokeResults.responsive.length > 0) {
-    // Filter smoke-responsive models through registry retirement check so
-    // a model that is retired or disabled does not get passed as a candidate.
+  if (smokeResults?.responsive.length) {
     const registry = loadRegistry();
-    const responsiveIds = smokeResults.responsive.map(r => r.modelId);
+    const responsiveIds = smokeResults.responsive.map(item => item.modelId);
     const activeIds = filterRetiredModels(responsiveIds, registry);
     executeOptions.forceModels = activeIds.length > 0 ? activeIds : responsiveIds;
   }
 
   const result = await executeAgentTask(executeOptions);
   const stepStatus = classifyStep(step.label, result);
-
   await updateProgress(progressCallback, `${step.label}: ${stepStatus}`, { step: step.label, status: stepStatus, attemptedModels: result.attemptedModels, successfulModel: result.successfulModel });
+  const finalBudget = result.budget || budgetTracker.snapshot();
+  events.emit(stepStatus === 'passed' ? 'workflow.call.completed' : 'workflow.call.failed', { stage: step.label, role: step.role, modelId: result.successfulModel, data: { code: result.code || null, budget: finalBudget } });
 
   return {
     status: stepStatus === 'passed' ? 'completed' : 'failed',
     code: result.code || null,
     taskId,
     summary: result.code === 'BUDGET_EXCEEDED'
-      ? (result.budget?.exceededReasons?.join('; ') || 'Task budget exceeded.')
+      ? (finalBudget.exceededReasons?.join('; ') || 'Task budget exceeded.')
       : stepStatus === 'passed' ? `Agent loop completed (${step.label}).` : `${step.label} step did not pass.`,
     successfulModel: result.successfulModel || null,
     attemptedModels: result.attemptedModels || [],
@@ -232,14 +301,18 @@ export async function runAgentLoop({
     review: { status: step.label === 'review' ? stepStatus : 'not-run' },
     requiresUserInput: result.code === 'FREE_MODELS_EXHAUSTED',
     logPath: result.logPath || '',
-    budget: result.budget || budgetTracker.snapshot(),
+    eventLogPath: events.path,
+    budget: finalBudget,
     steps: [{
-      step: step.label, status: stepStatus,
+      step: step.label,
+      status: stepStatus,
       successfulModel: result.successfulModel,
       attemptedModels: result.attemptedModels,
-      code: result.code, logPath: result.logPath,
+      code: result.code,
+      logPath: result.logPath,
+      eventLogPath: events.path,
       attemptDetails: result.attemptDetails || null,
-      budget: result.budget || budgetTracker.snapshot(),
+      budget: finalBudget,
       smokeResults: smokeResults ? { responsive: smokeResults.responsive, unresponsive: smokeResults.unresponsive } : null,
       stepStartedAt: new Date().toISOString()
     }]

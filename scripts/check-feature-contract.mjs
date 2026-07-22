@@ -14,6 +14,7 @@ function requireMatch(text, pattern, message) {
   if (!pattern.test(text)) failures.push(message);
 }
 
+requireMatch(orchestrator, /^steps:\s*(?:[1-9][0-9]?|100)\s*$/m, 'orchestrator steps must be capped at 100');
 requireMatch(orchestrator, /^\s*agent_loop:\s*allow\s*$/m, 'orchestrator must allow agent_loop');
 requireMatch(orchestrator, /^\s*task:\s*deny\s*$/m, 'orchestrator must deny direct task delegation');
 requireMatch(orchestrator, /same stable task ID|same `taskId`/i, 'orchestrator must require one stable task ID');

@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import {
@@ -69,10 +69,14 @@ function testLedgerRetentionIsBounded() {
 }
 
 async function testUsageAfterTerminationRemainsAccounted() {
+  if (process.platform === 'win32') {
+    console.log('SKIP: Windows terminates the child immediately and cannot emit a post-SIGTERM usage event');
+    return;
+  }
+
   const dir = mkdtempSync(resolve(tmpdir(), 'agent-loop-budget-stream-'));
-  const executable = resolve(dir, 'fake-worker.cjs');
-  writeFileSync(executable, `#!/usr/bin/env node
-process.on('SIGTERM', () => {});
+  const script = resolve(dir, 'fake-worker.cjs');
+  writeFileSync(script, `process.on('SIGTERM', () => {});
 const first = { type: 'step_finish', part: { type: 'step-finish', tokens: { input: 10, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }, cost: 0 } };
 const second = { type: 'step_finish', part: { type: 'step-finish', tokens: { input: 20, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }, cost: 0 } };
 process.stdout.write(JSON.stringify(first) + '\\n');
@@ -81,7 +85,6 @@ setTimeout(() => {
   setTimeout(() => process.exit(0), 20);
 }, 20);
 `, 'utf8');
-  chmodSync(executable, 0o755);
 
   let callbackCalls = 0;
   let callbackTokens = 0;
@@ -90,7 +93,8 @@ setTimeout(() => {
     agent: 'build-worker',
     model: 'free/model',
     prompt: 'test',
-    executable,
+    executable: process.execPath,
+    executableArgs: [script],
     timeoutMs: 2000,
     onUsage: ({ usage }) => {
       callbackCalls += 1;

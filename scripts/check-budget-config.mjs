@@ -39,6 +39,10 @@ if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets)) {
   nonNegativeNumber(budgets.max_input_tokens_per_task, 'budgets.max_input_tokens_per_task', { integer: true, nullable: true });
   nonNegativeNumber(budgets.max_output_tokens_per_task, 'budgets.max_output_tokens_per_task', { integer: true, nullable: true });
   nonNegativeNumber(budgets.max_cost_usd_per_task, 'budgets.max_cost_usd_per_task', { nullable: true });
+  nonNegativeNumber(budgets.max_workflow_calls_per_task, 'budgets.max_workflow_calls_per_task', { integer: true });
+  if (budgets.max_workflow_calls_per_task < 1) fail('budgets.max_workflow_calls_per_task must be at least 1');
+  if (typeof budgets.persist_state !== 'boolean') fail('budgets.persist_state must be boolean');
+  if (typeof budgets.state_path !== 'string' || !budgets.state_path) fail('budgets.state_path must be a non-empty string');
   nonNegativeNumber(budgets.ledger_ttl_minutes, 'budgets.ledger_ttl_minutes', { integer: true });
   nonNegativeNumber(budgets.max_tracked_tasks, 'budgets.max_tracked_tasks', { integer: true });
   if (budgets.ledger_ttl_minutes < 1) fail('budgets.ledger_ttl_minutes must be at least 1');
@@ -50,12 +54,8 @@ if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets)) {
   const total = budgets.max_tokens_per_task;
   const input = budgets.max_input_tokens_per_task;
   const output = budgets.max_output_tokens_per_task;
-  if (total !== null && input !== null && input > total) {
-    fail('input token limit cannot exceed total token limit');
-  }
-  if (total !== null && output !== null && output > total) {
-    fail('output token limit cannot exceed total token limit');
-  }
+  if (total !== null && input !== null && input > total) fail('input token limit cannot exceed total token limit');
+  if (total !== null && output !== null && output > total) fail('output token limit cannot exceed total token limit');
   if (total !== null && input !== null && output !== null && input + output > total) {
     fail('input plus output token limits cannot exceed total token limit');
   }
@@ -75,6 +75,20 @@ if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets)) {
     }
   }
 }
+
+const general = config.general || {};
+for (const key of ['paid_fallback_global_window_minutes', 'paid_fallback_task_state_ttl_minutes']) {
+  nonNegativeNumber(general[key], `general.${key}`, { integer: true });
+  if (general[key] < 1) fail(`general.${key} must be at least 1`);
+}
+for (const key of ['paid_fallback_log_path', 'paid_fallback_state_path']) {
+  if (typeof general[key] !== 'string' || !general[key]) fail(`general.${key} must be a non-empty string`);
+}
+
+if (config.provider_timeouts_ms?.local !== general.local_model_request_timeout_seconds * 1000) {
+  fail('provider_timeouts_ms.local must match general.local_model_request_timeout_seconds');
+}
+if (!config.events || config.events.schema_version !== '1.0.0') fail('events.schema_version must be 1.0.0');
 
 if (!config.retry?.non_retryable_errors?.includes('BUDGET_EXCEEDED')) {
   fail('retry.non_retryable_errors must include BUDGET_EXCEEDED');

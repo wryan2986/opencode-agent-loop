@@ -1,69 +1,74 @@
 # Required OpenCode Patch
 
-OpenCode Agent Loop currently requires a patched OpenCode build. The stock release does not expose all subagent failure information needed for reliable model failover.
+OpenCode Agent Loop currently requires a patched OpenCode build. The stock release does not expose all subagent failure information needed for reliable failover.
 
 ## Why the patch is required
 
-When a delegated agent fails because of a provider error, rate limit, timeout, quota problem, or non-retryable request error, the orchestrator must receive a structured failure. Without the patch, some failed task-tool calls can appear successful to the caller.
+Delegated provider errors, rate limits, timeouts, quota failures, and non-retryable request failures must reach the parent as structured failures. Without the patch, a failed child call can appear successful and allow the workflow to advance incorrectly.
 
-That can cause the workflow to:
+## Supported revision
 
-- advance after an implementation failed
-- skip model failover
-- misclassify transient and permanent provider errors
-- verify or review an incomplete change
+The known-good upstream repository and commit are recorded in:
+
+```text
+config/supported-opencode.json
+```
+
+Use that pinned revision for normal installations. The moving upstream `dev` branch is probed separately because the patch is revision-sensitive and does not necessarily apply to current development head.
 
 ## Patch contents
-
-The repository includes:
 
 ```text
 patches/opencode-subagent-failure-exposure.patch
 ```
 
-The patch adds or updates behavior for:
-
-- task-level model overrides
-- provider-error classification
-- subagent retry and failure metadata
-- non-retryable free-usage-limit handling
-- child-session failure propagation
-- resilient session-title generation
+The patch covers task-level model overrides, provider-error classification, retry metadata, free-usage-limit behavior, child-session failure propagation, and resilient session titles.
 
 ## Build process
 
-OpenCode's source repository and build commands can change. Follow the current upstream development instructions for prerequisites and building, then apply this repository's patch before compiling.
-
-A typical flow is:
-
 ```bash
-# Clone the current official OpenCode source repository.
 git clone https://github.com/anomalyco/opencode.git
 cd opencode
 
-# Apply the patch from this repository.
+git checkout "$(node -e "const fs=require('fs'); const p=JSON.parse(fs.readFileSync('/absolute/path/to/opencode-agent-loop/config/supported-opencode.json','utf8')); process.stdout.write(p.ref)")"
 git apply /absolute/path/to/opencode-agent-loop/patches/opencode-subagent-failure-exposure.patch
 
-# Install and build using the commands documented by upstream.
+# Install and build using the checked-out revision's upstream instructions.
 ```
 
-Do not assume an old `npm run build` command remains valid. Use the package manager and build procedure specified by the checked-out OpenCode revision.
+OpenCode's source layout and build procedure can change. Do not substitute the latest `dev` revision merely because cloning it succeeds, and do not assume an old npm build command remains valid.
 
-## Verify the patched behavior
+## Automated compatibility workflow
 
-At minimum, verify these cases before using the loop on important work:
+`.github/workflows/opencode-patch-compat.yml` runs for compatibility-related pull requests, weekly, and on manual request.
 
-1. A subagent provider failure is surfaced as a structured failure.
-2. A rate limit is classified separately from authentication or billing errors.
-3. Non-retryable failures stop retrying promptly.
-4. A free-usage-limit failure allows the orchestrator to select another model.
-5. A task-level model override reaches the child session.
-6. Cancelling or aborting a child task does not erase its failure metadata.
+The required job:
 
-Run the relevant upstream task, retry, session, and provider tests for the exact revision you built.
+1. reads the pinned revision from `config/supported-opencode.json`
+2. verifies and applies the patch
+3. installs upstream Bun dependencies
+4. builds a standalone OpenCode binary
+5. verifies the patched source contracts
+6. publishes the exact tested revision as a workflow artifact
+
+A separate non-blocking job probes the moving `dev` branch. Its purpose is early warning that the patch needs rebasing; failure of that probe does not invalidate the pinned supported build.
+
+## Verify behavior
+
+Before important use, verify:
+
+1. provider failures surface as structured failures
+2. rate limits differ from authentication and billing failures
+3. non-retryable failures stop promptly
+4. free-usage exhaustion permits another eligible model
+5. task-level model overrides reach the child session
+6. cancellation preserves failure metadata
+7. JSON usage and cost events remain available to budget enforcement
+
+Run the relevant upstream task, retry, session, provider, and CLI tests for the exact revision you built.
 
 ## Compatibility warning
 
-This patch is revision-sensitive. It may fail to apply cleanly after upstream changes, or it may apply while no longer producing the intended behavior. Treat a clean `git apply` as necessary but not sufficient; run the verification tests.
+The patch may fail to apply, fail to build, or apply while no longer producing the intended behavior. Treat `git apply` success as necessary but insufficient.
 
-The long-term goal is to remove this requirement by relying on equivalent upstream behavior or a stable provider/task extension interface.
+The long-term goal is to replace the patch with equivalent upstream behavior or a stable provider/task extension interface.

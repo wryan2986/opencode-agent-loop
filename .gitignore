@@ -55,6 +55,7 @@ Thumbs.db
 !.opencode/command/feature.md
 .opencode/node_modules/
 .opencode/agent-loop-logs/
+.opencode/agent-loop-state/
 *.bak
 
 # Benchmark output (gitignored temp location)

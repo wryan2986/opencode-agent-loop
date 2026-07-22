@@ -2,11 +2,11 @@
 
 ## Overview
 
-OpenCode Agent Loop coordinates specialized agents through a gated software-development lifecycle:
+OpenCode Agent Loop coordinates a gated development lifecycle:
 
-`plan → approve → baseline test → implement → verify and review → fix or escalate → commit`
+`plan → approve → smoke → build → test → review → fix or escalate → commit`
 
-The parent orchestrator remains responsible for inspection, planning, approval, stage order, and the final commit. Delegated model execution is centralized in the `agent_loop` custom tool so routing, failover, paid-fallback controls, and worker-budget enforcement cannot be bypassed.
+The paid parent orchestrator handles inspection, planning, approval, stage order, and the final commit. Every delegated model call goes through `agent_loop`, which centralizes provider adapters, free-first routing, retries, failover, budget enforcement, and structured events.
 
 ```text
               User request
@@ -14,118 +14,78 @@ The parent orchestrator remains responsible for inspection, planning, approval, 
                    v
 +--------------------------------------+
 | Parent orchestrator                  |
-| Inspects, plans, requests approval   |
-| Reuses one stable feature task ID    |
+| Plans and reuses one stable task ID  |
+| Turn cap + workflow-call budget      |
 +--------------------------------------+
                    |
                    v
 +--------------------------------------+
-| agent_loop custom tool               |
+| agent_loop runtime                   |
 | Smoke | Build | Test | Review        |
-| Escalate | Failover | Budget guard   |
+| Retry | Failover | Escalate          |
 +--------------------------------------+
                    |
                    v
 +--------------------------------------+
-| Specialized worker processes         |
-| Free-first pools and paid fallback   |
+| Reliability services                 |
+| Provider adapters | Persistent budget|
+| Structured events | Checkpoints      |
++--------------------------------------+
+                   |
+                   v
++--------------------------------------+
+| OpenCode worker processes            |
+| Free/local pools -> paid fallback    |
 +--------------------------------------+
 ```
 
-## Workflow state machine
+## Workflow contract
 
-The normal path is:
+A feature uses one stable task ID across every stage. `BUDGET_EXCEEDED` is terminal: the orchestrator must not continue under a replacement ID or bypass `agent_loop` with direct task delegation.
 
-1. **PLANNING** — inspect the repository, discover commands, and define acceptance criteria
-2. **AWAITING_APPROVAL** — present the plan and wait for explicit approval
-3. **SMOKE_TESTING** — identify responsive worker models through `agent_loop`
-4. **IMPLEMENTING** — run the approved build request with the stable task ID
-5. **VERIFYING** — run post-change verification through the test role
-6. **REVIEWING** — independently inspect the diff, tests, security, and acceptance criteria
-7. **READY_TO_COMMIT** — confirm gates, inspect staged content, and create a focused commit
-8. **COMPLETED** — report results and budget scope
-
-Conditional states are:
-
-- **FIXING** — a bounded build call corrects failed test or review findings, then returns to verification and review
-- **ESCALATING** — a stronger diagnostic role investigates repeated non-budget failures
-- **BLOCKED** — progress requires user input, an unavailable dependency, or an exhausted budget
-
-`BUDGET_EXCEEDED` is terminal. The orchestrator must not continue under a fresh task ID or fall back to direct task delegation.
+Test and review are independent gates. Every fix cycle returns through both. Only the parent orchestrator may create the final local commit, and it never pushes automatically.
 
 ## Agent roles
 
-The repository contains cloud and local roles. The exact number may change as agents are added or retired, so documentation describes capabilities rather than relying on a fixed count.
+The exact number of roles may change. Current capabilities include orchestration, standard and trivial building, testing, independent review, exploration, reconciliation, escalation, and local private or low-cost work. See [Agent Roles](agent-roles.md).
 
-| Role | Responsibility | Typical access |
-|------|----------------|----------------|
-| Orchestrator | Inspection, planning, stage enforcement, final commit | Read, `agent_loop`, limited Git |
-| Build worker | Approved implementation | Read, edit, bounded shell |
-| Trivial builder | Small bounded changes | Read, edit, bounded shell |
-| Test agent | Baseline and post-change verification | Read, test edits, bounded shell |
-| Review agent | Independent review | Read-only |
-| Explore agent | Codebase research | Read-only |
-| Reconcile agent | Integrate overlapping work | Read, edit, bounded Git |
-| Escalation agent | Diagnose repeated failures | Read, edit, optionally web |
-| Local agents | Sensitive, offline, or low-cost bounded work | Role-specific, local model only |
+## Routing and retries
 
-See [Agent Roles](agent-roles.md).
+Provider adapters identify models, select timeout keys, and normalize provider errors. Transient failures can retry the same model using exponential backoff and jitter. After retries are exhausted, failover moves to another eligible provider. Non-retryable task, auth, billing, safety, cancellation, and budget failures stop immediately.
 
-## Model routing
+Free-first worker pools may include local models and controlled paid fallback. GPT-5.6 Luna is reserved for explicit escalation.
 
-The default design uses two routing policies:
+## Budgets
 
-- **Parent orchestrator:** paid DeepSeek V4 Flash for dependable coordination
-- **Delegated workers:** free-first ordered pools, local models where appropriate, then controlled paid fallback
+Budget state is persisted atomically per project under `.opencode/agent-loop-state/`. The ledger covers delegated tokens and cost plus the number of parent workflow calls. The parent orchestrator also has a bounded turn count.
 
-GPT-5.6 Luna is reserved for explicit escalation and difficult diagnosis rather than routine work.
+OpenCode does not currently expose parent-session token and cost events to this plugin, so snapshots state `parentModelUsageIncluded: false`. They must not be described as complete end-to-end dollar totals.
 
-Provider failures are classified before failover. Rate limits and transient availability failures may trigger provider-wide cooldowns; isolated request, safety, or billing failures should only affect the relevant model or credential path.
+## Structured events
 
-## Runtime architecture
+The runtime emits versioned JSON Lines events for workflow calls, stages, attempts, retries, model selection, cooldowns, budget changes, and completion. Events are recursively redacted and queryable with `scripts/query-events.mjs`. See [Structured Event Logging](event-logging.md).
 
-```text
-OpenCode TUI
-  |
-  +-- /feature --> orchestrator
-                       |
-                 stable taskId
-                       |
-                       v
-                 agent_loop tool
-                       |
-                       v
-             agent-loop-controller.mjs
-                       |
-            +----------+----------+
-            |          |          |
-         failover   paid guard   budget guard
-            |          |          |
-            +----------+----------+
-                       |
-                       v
-              OpenCode worker process
-```
+## State and recovery
 
-The plugin entry point is `.opencode/plugins/agent-loop.js`. Runtime execution is centralized under `runtime/`, with routing and budget helpers under `lib/`.
-
-The budget ledger covers delegated worker processes. The parent orchestrator model's own message usage is outside that ledger and must be reported separately as an untracked scope limitation.
-
-## Configuration and state
-
-Stable configuration:
+Stable configuration lives in:
 
 - `config/free-first-config.json`
 - `config/free-first-config-schema.json`
 - `config/free-first-pools.json`
 - `config/model-registry.json`
 
-Transient health data, cooldowns, failure counts, task checkpoints, and worker logs should be written to ignored runtime-state files rather than committed configuration. Budget ledgers are retained in memory only for the configured TTL and maximum task count.
+Ignored runtime state includes:
 
-See [Configuration](configuration.md).
+- persistent budgets
+- structured events
+- provider cooldowns
+- portable task checkpoints
+- attempt and progress logs
 
-## Trust boundaries
+The v0.2 foundations make interrupted-state reconstruction possible; full automatic stage resume remains planned for v0.3.
 
-Agent permissions reduce accidental damage but are not an operating-system sandbox. Shell permissions must use explicit command patterns and deny destructive Git operations. Run untrusted work in a container or VM and review provider data policies before sending confidential code.
+## Compatibility and trust boundaries
 
-See [Safety Model](safety-model.md).
+The portable Node runtime is tested on Linux, macOS, and Windows. Bash installation and permission validation require Linux, WSL, macOS, or Git Bash. A scheduled workflow builds the patched OpenCode revision and verifies required source contracts.
+
+Agent permissions and redaction reduce risk but are not an operating-system sandbox. Run untrusted repositories in a container or VM, keep credentials out of prompts, and review provider data policies.

@@ -1,0 +1,140 @@
+name: OpenCode patch compatibility
+
+on:
+  pull_request:
+    branches: [main, master]
+    paths:
+      - patches/opencode-subagent-failure-exposure.patch
+      - config/supported-opencode.json
+      - scripts/check-opencode-patch-contract.mjs
+      - .github/workflows/opencode-patch-compat.yml
+  workflow_dispatch:
+    inputs:
+      opencode_ref:
+        description: Optional OpenCode branch, tag, or commit. Empty uses the pinned supported revision.
+        required: false
+        default: ''
+  schedule:
+    - cron: '23 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  supported-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out agent loop
+        uses: actions/checkout@v4
+
+      - name: Resolve supported revision
+        id: supported
+        shell: bash
+        env:
+          REQUESTED_REF: ${{ inputs.opencode_ref }}
+        run: |
+          set -euo pipefail
+          configured_ref=$(node -e "const fs=require('fs'); const value=JSON.parse(fs.readFileSync('config/supported-opencode.json','utf8')); process.stdout.write(value.ref)")
+          selected_ref=${REQUESTED_REF:-$configured_ref}
+          echo "ref=$selected_ref" >> "$GITHUB_OUTPUT"
+          echo "Testing OpenCode revision $selected_ref"
+
+      - name: Check out supported OpenCode
+        uses: actions/checkout@v4
+        with:
+          repository: anomalyco/opencode
+          ref: ${{ steps.supported.outputs.ref }}
+          path: upstream-opencode
+          fetch-depth: 1
+
+      - name: Verify patch applies
+        working-directory: upstream-opencode
+        run: git apply --check ../patches/opencode-subagent-failure-exposure.patch
+
+      - name: Apply patch
+        working-directory: upstream-opencode
+        run: git apply ../patches/opencode-subagent-failure-exposure.patch
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
+
+      - name: Install upstream dependencies
+        working-directory: upstream-opencode
+        run: bun install --frozen-lockfile
+
+      - name: Build native standalone OpenCode
+        working-directory: upstream-opencode
+        shell: bash
+        run: |
+          set +e
+          bun ./packages/opencode/script/build.ts --single --skip-install --skip-embed-web-ui 2>&1 | tee ../opencode-build.log
+          status=${PIPESTATUS[0]}
+          set -e
+          exit "$status"
+
+      - name: Verify patched source contracts
+        run: node scripts/check-opencode-patch-contract.mjs upstream-opencode
+
+      - name: Record tested revision
+        if: always()
+        shell: bash
+        run: |
+          git -C upstream-opencode rev-parse HEAD > opencode-tested-revision.txt
+          printf 'requested_ref=%s\n' '${{ steps.supported.outputs.ref }}' >> opencode-tested-revision.txt
+          printf 'tested_at=%s\n' "$(date -u +%FT%TZ)" >> opencode-tested-revision.txt
+
+      - name: Upload compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-supported-compatibility
+          path: |
+            opencode-tested-revision.txt
+            opencode-build.log
+
+  upstream-dev-probe:
+    if: github.event_name != 'workflow_dispatch' || inputs.opencode_ref == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: anomalyco/opencode
+          ref: dev
+          path: upstream-opencode-dev
+          fetch-depth: 1
+      - name: Probe patch against moving dev branch
+        id: probe
+        working-directory: upstream-opencode-dev
+        shell: bash
+        run: |
+          set +e
+          git apply --check ../patches/opencode-subagent-failure-exposure.patch > ../opencode-dev-patch-check.txt 2>&1
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "compatible=true" >> "$GITHUB_OUTPUT"
+            echo "### Upstream dev probe: compatible" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "compatible=false" >> "$GITHUB_OUTPUT"
+            echo "### Upstream dev probe: patch rebase needed" >> "$GITHUB_STEP_SUMMARY"
+            echo "The pinned supported revision remains the release target. See the uploaded probe artifact for details." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit 0
+      - name: Record upstream revision
+        if: always()
+        shell: bash
+        run: |
+          git -C upstream-opencode-dev rev-parse HEAD > opencode-dev-probe.txt
+          printf 'patch_compatible=%s\n' '${{ steps.probe.outputs.compatible }}' >> opencode-dev-probe.txt
+          cat opencode-dev-patch-check.txt >> opencode-dev-probe.txt
+      - name: Upload upstream probe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-dev-probe
+          path: opencode-dev-probe.txt

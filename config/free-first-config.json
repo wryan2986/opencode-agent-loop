@@ -1,6 +1,6 @@
 {
   "$schema": "./free-first-config-schema.json",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "general": {
     "free_first": true,
     "allow_paid_fallback": true,
@@ -33,7 +33,11 @@
     ],
     "local_only_task_classifications": [
       "trusted-provider-only"
-    ]
+    ],
+    "paid_fallback_log_path": ".opencode/agent-loop-state/paid-escalations.jsonl",
+    "paid_fallback_state_path": ".opencode/agent-loop-state/paid-fallback-state.json",
+    "paid_fallback_global_window_minutes": 1440,
+    "paid_fallback_task_state_ttl_minutes": 1440
   },
   "cooldowns": {
     "single_rate_limit_minutes": 10,
@@ -118,7 +122,10 @@
     "groq": 30000,
     "cerebras": 60000,
     "opencode": 60000,
+    "opencode-go": 60000,
     "openrouter": 60000,
+    "openai": 300000,
+    "local": 420000,
     "default": 300000
   },
   "latency_timeout_mapping": {
@@ -131,7 +138,10 @@
     "groq": 15000,
     "cerebras": 15000,
     "opencode": 15000,
+    "opencode-go": 15000,
     "openrouter": 15000,
+    "openai": 15000,
+    "local": 30000,
     "default": 15000
   },
   "task_classification": {
@@ -147,7 +157,10 @@
     "max_input_tokens_per_task": 200000,
     "max_output_tokens_per_task": 50000,
     "max_cost_usd_per_task": 1,
+    "max_workflow_calls_per_task": 12,
     "fail_closed_on_unknown_pricing": false,
+    "persist_state": true,
+    "state_path": ".opencode/agent-loop-state/budgets.json",
     "ledger_ttl_minutes": 1440,
     "max_tracked_tasks": 1000,
     "unknown_paid_model_pricing": {
@@ -156,6 +169,48 @@
       "reasoning_per_million_usd": 15,
       "cache_read_per_million_usd": 1,
       "cache_write_per_million_usd": 5
+    }
+  },
+  "events": {
+    "enabled": true,
+    "path": ".opencode/agent-loop-state/events.jsonl",
+    "schema_version": "1.0.0"
+  },
+  "provider_retry": {
+    "local": {
+      "max_retries": 1,
+      "retryable_errors": [
+        "ECONNRESET",
+        "ETIMEDOUT",
+        "ECONNREFUSED",
+        "EPIPE"
+      ],
+      "non_retryable_errors": [
+        "UNAUTHORIZED",
+        "FORBIDDEN",
+        "BUDGET_EXCEEDED"
+      ]
+    },
+    "nvidia": {
+      "max_retries": 2
+    },
+    "cerebras": {
+      "max_retries": 2
+    },
+    "groq": {
+      "max_retries": 1
+    },
+    "openrouter": {
+      "max_retries": 1
+    },
+    "opencode": {
+      "max_retries": 1
+    },
+    "opencode-go": {
+      "max_retries": 2
+    },
+    "openai": {
+      "max_retries": 2
     }
   }
 }

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/wryan2986/opencode-agent-loop/schemas/agent-loop-event-1.0.0.json",
+  "title": "OpenCode Agent Loop Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "eventId", "timestamp", "type", "taskId", "data"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "eventId": { "type": "string", "minLength": 8 },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "type": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9-]*)+$"
+    },
+    "taskId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "stage": { "type": "string", "minLength": 1 },
+    "role": { "type": "string", "minLength": 1 },
+    "modelId": { "type": "string", "minLength": 1 },
+    "data": { "type": "object" }
+  }
+}

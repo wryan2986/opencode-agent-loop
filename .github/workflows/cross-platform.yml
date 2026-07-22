@@ -1,0 +1,88 @@
+name: Cross-platform runtime
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  portable-runtime:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: [20, 22]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Validate routing policy
+        run: npm run validate:routing
+      - name: Validate budget policy
+        run: npm run validate:budget
+      - name: Validate feature contract
+        run: npm run validate:feature
+      - name: Validate documentation links
+        run: node scripts/check-doc-links.mjs
+      - name: Test v0.2 reliability features
+        run: node tests/reliability-v020-tests.mjs
+      - name: Test budget enforcement
+        run: node tests/budget-tests.mjs
+      - name: Test budget edge cases
+        run: node tests/budget-audit-tests.mjs
+      - name: Test routing
+        run: node tests/routing-tests.mjs
+      - name: Test runtime
+        shell: bash
+        run: |
+          set +e
+          node tests/runtime-tests.mjs 2>&1 | tee runtime-test.log
+          status=${PIPESTATUS[0]}
+          set -e
+          exit "$status"
+      - name: Upload runtime-test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-test-${{ matrix.os }}-node-${{ matrix.node-version }}
+          path: runtime-test.log
+      - name: Test plugin integration
+        run: node tests/tool-integration-tests.mjs
+      - name: Test bypass detection
+        run: node tests/bypass-detection.mjs
+      - name: Test installer in POSIX shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_home="$PWD/.installer-test-home"
+          test_bin="$PWD/.installer-test-bin"
+          mkdir -p "$test_home" "$test_bin"
+          : > "$test_home/.bashrc"
+          cat > "$test_bin/opencode" <<'EOF'
+          #!/usr/bin/env bash
+          exit 0
+          EOF
+          chmod +x "$test_bin/opencode"
+          HOME="$test_home" PATH="$test_bin:$PATH" bash scripts/install.sh
+          grep -F 'OPENCODE_CONFIG_DIR=' "$test_home/.bashrc"
+          rm -rf "$test_home" "$test_bin"
+
+  bash-installation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run validate
