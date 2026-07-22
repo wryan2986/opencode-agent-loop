@@ -57,6 +57,12 @@ jobs:
       - name: Check routing defaults
         run: node scripts/check-routing-defaults.mjs
 
+      - name: Check budget configuration
+        run: npm run validate:budget
+
+      - name: Check feature integration contract
+        run: npm run validate:feature
+
       - name: Check documentation links
         run: node scripts/check-doc-links.mjs
 

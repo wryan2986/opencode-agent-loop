@@ -5,10 +5,15 @@
 ### Added
 
 - Added configurable per-task token and cost budgets with live OpenCode usage tracking, model-registry pricing estimates, failover interruption, and structured budget output. Closes #4.
+- Added the referenced free-first configuration schema and automated budget/feature contract validation.
+- Added bounded in-memory budget-ledger retention with configurable TTL and task-count limits.
 
 ### Fixed
 
 - Treat local-unmetered models as zero-cost and account for a final usage event even when the JSON stream has no trailing newline.
+- Route `/feature` delegation through the budget-enforced `agent_loop` tool and require one stable task ID across all stages.
+- Continue recording usage emitted during worker shutdown after a budget-triggered termination.
+- Mark budget totals explicitly as delegated-worker scope so parent-orchestrator usage is not misrepresented.
 
 ## [0.1.1] - 2026-07-22
 

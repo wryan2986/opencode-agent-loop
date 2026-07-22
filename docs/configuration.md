@@ -14,9 +14,9 @@ Controls global behavior such as:
 - smoke-test behavior
 - privacy classifications
 - paid-call limits
-- per-task token and cost budgets
+- delegated-worker token and cost budgets
 
-Treat this file as policy. Do not store provider keys or other credentials in it.
+The file references `config/free-first-config-schema.json` for editor validation. Treat it as policy. Do not store provider keys or other credentials in it.
 
 ### `config/free-first-pools.json`
 
@@ -39,6 +39,7 @@ Stores model capabilities and data-handling metadata, including:
 - privacy classification
 - whether sensitive code is allowed
 - paid equivalent or fallback information
+- structured pricing where known
 
 The registry is descriptive configuration, not a runtime log. Health-check timestamps and failure counters should be initialized to clean values in version control.
 
@@ -46,16 +47,16 @@ The registry is descriptive configuration, not a runtime log. Health-check times
 
 The intended default strategy is:
 
-- paid DeepSeek V4 Flash for the orchestrator
-- free-first pools for build, test, review, exploration, and reconciliation
+- paid DeepSeek V4 Flash for the parent orchestrator
+- free-first pools for delegated build, test, review, and related worker calls
 - paid fallback only after suitable free providers are unavailable or fail
 - GPT-5.6 Luna for explicit escalation and difficult diagnosis
 
-This distinction matters: the orchestrator is not free-first, while delegated roles generally are.
+The `/feature` command must make delegated calls through the `agent_loop` custom tool. Direct use of OpenCode's built-in `task` tool bypasses this package's router, failover controller, and budget ledger.
 
 ## Task budgets
 
-The `budgets` section in `config/free-first-config.json` enforces a shared limit for a task ID across smoke, build, test, review, and failover attempts.
+The `budgets` section in `config/free-first-config.json` enforces a shared limit for one stable task ID across smoke, build, test, review, escalation, and provider-failover attempts.
 
 Default limits are:
 
@@ -66,7 +67,20 @@ Default limits are:
 
 OpenCode `step_finish` events provide input, output, reasoning, cache-read, cache-write, and provider-reported cost data. The runtime tracks those values by task step and model. Cost estimation uses structured `pricing` fields in `config/model-registry.json`; legacy price text is supported for compatibility. Unknown paid-model prices use the conservative fallback rates in `unknown_paid_model_pricing` unless `fail_closed_on_unknown_pricing` is enabled.
 
-When any limit is crossed, the active worker is terminated, failover stops, and the structured result returns `code: "BUDGET_EXCEEDED"` with the complete budget snapshot. Reuse the same optional `taskId` in sequential `agent_loop` calls to share one budget across stages.
+The reported `scope` is `delegated-workers`. The parent orchestrator model's own conversation usage is not included in this ledger, so the budget snapshot must not be presented as the complete cost of the entire OpenCode session.
+
+When any limit is crossed, the active worker is terminated, failover stops, and the structured result returns `code: "BUDGET_EXCEEDED"` with the complete worker-budget snapshot. The runtime continues recording any final usage events emitted while the process shuts down so the ledger does not understate the completed request.
+
+Reuse the same optional `taskId` in every sequential `agent_loop` call belonging to one feature. Starting a new task ID after exhaustion would bypass the configured safety limit and is prohibited by the `/feature` contract.
+
+### Ledger retention
+
+Budget ledgers live in the long-running plugin process so separate stage calls can share totals. To prevent unbounded memory growth:
+
+- `ledger_ttl_minutes` expires inactive ledgers; default: 1,440 minutes
+- `max_tracked_tasks` caps retained ledgers; default: 1,000 tasks
+
+Expired or oldest inactive ledgers are pruned when a new tracker is created. These values affect in-memory accounting only; they do not delete repository logs.
 
 ## Provider cooldowns
 
@@ -97,4 +111,4 @@ Run:
 npm run validate
 ```
 
-The validation command checks repository structure, JSON syntax, agent configuration, documentation links, and the test suite components configured by the project.
+The validation command checks repository structure, agent permissions, routing defaults, the budget policy and referenced schema, `/feature` integration, documentation links, and the deterministic test suites.

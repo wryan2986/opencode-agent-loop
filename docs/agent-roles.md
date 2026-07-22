@@ -4,16 +4,18 @@
 
 The framework defines specialized cloud and local roles with separate responsibilities, models, and permissions. The exact number of agent files may change as roles are added, retired, or split, so this guide describes capabilities rather than relying on a fixed count.
 
-Agents do not communicate directly with one another. The orchestrator delegates work and passes structured context between roles.
+Workers do not communicate directly with one another. The parent orchestrator passes structured context between stages through the `agent_loop` custom tool.
 
 ## Orchestrator
 
 **Primary coordinator** — drives the complete lifecycle.
 
 - Default model: `opencode-go/deepseek-v4-flash`
-- Access: read-only workspace access, task delegation, limited Git commands
-- Responsibilities: repository inspection, acceptance criteria, dependency DAG, plan approval, state transitions, model failover, and final commit
-- Restrictions: does not implement code, run verification itself, push, or rewrite history
+- Access: read-only workspace access, `agent_loop`, and limited Git commands
+- Responsibilities: repository inspection, acceptance criteria, plan approval, stage order, stable task-ID reuse, budget-stop handling, and the final commit
+- Restrictions: cannot edit implementation files, use direct `task` delegation, push, rewrite history, or continue after `BUDGET_EXCEEDED`
+
+The orchestrator creates one task ID per feature and passes it to every smoke, build, test, review, fix, and escalation call. This keeps delegated-worker token and cost totals cumulative.
 
 ## Build Worker
 
@@ -62,10 +64,10 @@ Use the standard builder when a change has architectural consequences, unclear s
 
 ## Reconcile Agent
 
-**Conflict-resolution role** — integrates overlapping parallel changes.
+**Conflict-resolution role** — integrates overlapping approved changes when explicitly routed by the runtime.
 
 - Access: read, edit, and narrowly scoped merge-related operations
-- Responsibilities: resolving conflicts, preserving both approved work units, and returning the result for independent verification
+- Responsibilities: resolving conflicts, preserving approved work units, and returning the result for independent verification
 - Restrictions: cannot create the final commit or push
 
 ## Escalation Agent
@@ -75,7 +77,7 @@ Use the standard builder when a change has architectural consequences, unclear s
 - Primary escalation model: `openai/gpt-5.6-luna`
 - Access: read, edit, and optionally approved web access
 - Responsibilities: root-cause diagnosis, alternative approaches, complex debugging, and recovery recommendations
-- Restrictions: cannot bypass testing and review gates, commit, or push
+- Restrictions: cannot bypass the shared task budget, testing and review gates, commit, or push
 
 ## Local Agents
 
@@ -92,12 +94,17 @@ Local models must not be used as the final authority for security review or prim
 
 ## Delegation rules
 
-- The orchestrator selects roles based on task complexity and stage.
+- `/feature` delegation goes through `agent_loop`, not the built-in `task` tool.
+- Every stage for one feature reuses the same stable `taskId`.
 - Builders never approve their own output.
 - Test and review run independently after implementation and after every fix cycle.
-- Reconciliation returns to verification.
-- Escalation does not skip baseline, test, or review requirements.
-- Subagents cannot start another full agent loop.
+- Escalation does not skip test or review requirements.
+- `BUDGET_EXCEEDED` ends the feature run; a replacement ID must not be used to evade the limit.
+- Worker agents cannot start another full agent loop.
+
+## Budget scope
+
+The budget snapshot covers delegated workers launched through `agent_loop`. It does not include the parent orchestrator model's own conversation usage. Reports must describe that boundary explicitly rather than presenting worker cost as total session cost.
 
 ## Permission guidance
 

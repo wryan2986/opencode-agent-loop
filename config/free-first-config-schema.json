@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/wryan2986/opencode-agent-loop/config/free-first-config-schema.json",
+  "title": "OpenCode Agent Loop free-first configuration",
+  "type": "object",
+  "required": [
+    "version",
+    "general",
+    "retry",
+    "model_registry_path",
+    "pools_path",
+    "budgets"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "general": {
+      "type": "object"
+    },
+    "cooldowns": {
+      "type": "object"
+    },
+    "privacy": {
+      "type": "object"
+    },
+    "retry": {
+      "type": "object",
+      "required": [
+        "max_retries",
+        "retryable_http_codes",
+        "retryable_errors",
+        "non_retryable_errors"
+      ],
+      "properties": {
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "base_delay_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_delay_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "jitter_factor": {
+          "type": "number",
+          "minimum": 0
+        },
+        "retryable_http_codes": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "uniqueItems": true
+        },
+        "retryable_errors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "non_retryable_errors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "model_registry_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pools_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "provider_timeouts_ms": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "latency_timeout_mapping": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "smoke_test_provider_timeout_ms": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "task_classification": {
+      "type": "object"
+    },
+    "lightweight_profiles": {
+      "type": "object"
+    },
+    "budgets": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "max_tokens_per_task",
+        "max_input_tokens_per_task",
+        "max_output_tokens_per_task",
+        "max_cost_usd_per_task",
+        "fail_closed_on_unknown_pricing",
+        "ledger_ttl_minutes",
+        "max_tracked_tasks",
+        "unknown_paid_model_pricing"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "max_tokens_per_task": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "max_input_tokens_per_task": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "max_output_tokens_per_task": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "max_cost_usd_per_task": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "fail_closed_on_unknown_pricing": {
+          "type": "boolean"
+        },
+        "ledger_ttl_minutes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_tracked_tasks": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "unknown_paid_model_pricing": {
+          "$ref": "#/$defs/pricing"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "pricing": {
+      "type": "object",
+      "required": [
+        "input_per_million_usd",
+        "output_per_million_usd",
+        "reasoning_per_million_usd",
+        "cache_read_per_million_usd",
+        "cache_write_per_million_usd"
+      ],
+      "properties": {
+        "input_per_million_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "output_per_million_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "reasoning_per_million_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "cache_read_per_million_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "cache_write_per_million_usd": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}
