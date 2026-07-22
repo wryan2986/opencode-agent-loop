@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Pre-commit hook: validate agent configs before each commit.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+echo "🔍 Validating agent configs..."
+if bash "$SCRIPT_DIR/scripts/validate-agent-configs.sh" --quiet; then
+  echo "✅ Agent configs valid"
+else
+  echo "❌ Agent config validation failed. Fix errors before committing."
+  echo "   Run: bash scripts/validate-agent-configs.sh"
+  exit 1
+fi
+
+# Check for .bak files that shouldn't be committed
+BAK_FILES=$(find "$SCRIPT_DIR/agents" -name '*.bak' 2>/dev/null)
+if [[ -n "$BAK_FILES" ]]; then
+  echo "⚠️  Found .bak files in agents/ — consider removing:"
+  echo "$BAK_FILES"
+fi

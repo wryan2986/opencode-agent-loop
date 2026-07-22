@@ -1,0 +1,69 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Rust
+target/
+
+# Java
+*.class
+*.jar
+*.war
+.gradle/
+build/
+
+# Go
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment (never commit credentials)
+.env
+.env.*
+!.env.example
+
+# Local state
+*.local
+
+# OpenCode auto-generated
+package-lock.json
+.opencode/*
+!.opencode/package.json
+!.opencode/plugins/
+!.opencode/plugins/agent-loop.js
+!.opencode/command/
+!.opencode/command/loop.md
+!.opencode/command/feature.md
+.opencode/node_modules/
+.opencode/agent-loop-logs/
+*.bak
+
+# Benchmark output (gitignored temp location)
+benchmark-output/
+
+# Runtime state (not version-controlled)
+config/free-first-pools-state.json
+config/*-state.json
+
+# Backup directory
+.backups/

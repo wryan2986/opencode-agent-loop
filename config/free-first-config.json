@@ -1,0 +1,143 @@
+{
+  "$schema": "./free-first-config-schema.json",
+  "version": "1.0.0",
+  "general": {
+        "free_first": false,
+    "allow_paid_fallback": true,
+    "free_model_max_attempts": 3,
+    "local_model_max_attempts": 1,
+    "local_model_concurrency": 1,
+    "local_model_request_timeout_seconds": 420,
+    "local_model_context_limit": 32768,
+    "local_model_output_limit": 4096,
+    "local_model_recommended_max_prompt_tokens": 26000,
+        "paid_fallback_max_calls_per_task": 10,
+        "paid_fallback_max_calls_global": 100,
+    "paid_fallback_requires_approval": false,
+    "paid_fallback_allowed_roles": [
+      "orchestrator",
+      "builder",
+      "reviewer",
+      "test-fixer"
+    ],
+    "trial_credit_models_enabled": false,
+        "smoke_test_enabled": false,
+    "smoke_test_prompt": "Reply with exactly one word: ok",
+    "smoke_test_default_timeout_ms": 30000,
+    "default_free_classifications": [
+      "recurring free tier",
+      "promotional free"
+    ],
+    "sensitive_task_classifications": [
+      "standard"
+    ],
+    "local_only_task_classifications": [
+      "trusted-provider-only"
+    ]
+  },
+  "cooldowns": {
+    "single_rate_limit_minutes": 10,
+    "repeated_rate_limit_minutes": 30,
+    "repeated_provider_failure_minutes": 30,
+    "provider_wide_rate_limit_minutes": 15,
+    "daily_quota_exhausted_minutes": 720,
+    "default_cooldown_minutes": 15,
+    "provider_wide_failure_minutes": 10,
+    "local_single_failure_cooldown_minutes": 5,
+    "local_repeated_failure_cooldown_minutes": 15,
+    "local_health_cache_seconds": 60
+  },
+  "privacy": {
+    "privacy_map": {
+      "standard": {
+        "sensitive_tasks_allowed": false,
+        "local_only": false
+      },
+      "data-used-for-improvement": {
+        "sensitive_tasks_allowed": false,
+        "local_only": false
+      },
+      "trial-only-logged": {
+        "sensitive_tasks_allowed": false,
+        "local_only": false
+      },
+      "data-retained-for-improvement": {
+        "sensitive_tasks_allowed": false,
+        "local_only": false
+      },
+      "trusted-provider-only": {
+        "sensitive_tasks_allowed": true,
+        "local_only": false
+      },
+      "local-private": {
+        "sensitive_tasks_allowed": true,
+        "local_only": true
+      }
+    },
+    "local_preferred_classifications": [
+      "local-only",
+      "sensitive",
+      "private-repository",
+      "contains-private-logs"
+    ],
+    "local_fallback_requires_privacy_filter": true
+  },
+  "retry": {
+    "max_retries": 2,
+    "base_delay_ms": 1000,
+    "max_delay_ms": 30000,
+    "jitter_factor": 0.1,
+    "retryable_http_codes": [
+      410,
+      429,
+      500,
+      502,
+      503,
+      504
+    ],
+    "retryable_errors": [
+      "ECONNRESET",
+      "ETIMEDOUT",
+      "ECONNREFUSED",
+      "EPIPE"
+    ],
+    "non_retryable_errors": [
+      "UNAUTHORIZED",
+      "FORBIDDEN",
+      "SAFETY_REJECTION",
+      "BILLING_DISABLED",
+      "INVALID_REQUEST",
+      "USER_CANCELLED"
+    ]
+  },
+  "model_registry_path": "./config/model-registry.json",
+  "pools_path": "./config/free-first-pools.json",
+  "provider_timeouts_ms": {
+    "nvidia": 120000,
+    "groq": 30000,
+    "cerebras": 60000,
+    "opencode": 60000,
+    "openrouter": 60000,
+    "default": 300000
+  },
+  "latency_timeout_mapping": {
+    "fast": 120000,
+    "medium": 300000,
+    "slow": 600000
+  },
+  "smoke_test_provider_timeout_ms": {
+    "nvidia": 15000,
+    "groq": 15000,
+    "cerebras": 15000,
+    "opencode": 15000,
+    "openrouter": 15000,
+    "default": 15000
+  },
+  "task_classification": {
+    "complex_file_threshold": 5,
+    "local_trivial_max_files": 2,
+    "local_trivial_max_lines": 20,
+    "routine_fallback_on_uncertain": true
+  },
+  "lightweight_profiles": {}
+}

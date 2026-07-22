@@ -1,0 +1,9 @@
+{
+  "type": "module",
+  "scripts": {
+    "test": "node tests/routing-tests.mjs && node tests/runtime-tests.mjs && node tests/tool-integration-tests.mjs && node tests/bypass-detection.mjs"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "1.17.13"
+  }
+}
