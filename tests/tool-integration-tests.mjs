@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import AgentLoopPlugin from '../.opencode/plugins/agent-loop.js';
@@ -16,17 +16,8 @@ console.log('RESULT: PASS');
 process.exit(0);
 `, 'utf8');
 
-let fakeOpencode;
-if (process.platform === 'win32') {
-  fakeOpencode = resolve(dir, 'fake-opencode.cmd');
-  writeFileSync(fakeOpencode, `@echo off\r\n"${process.execPath}" "%~dp0fake-opencode.cjs" %*\r\n`, 'utf8');
-} else {
-  fakeOpencode = resolve(dir, 'fake-opencode');
-  writeFileSync(fakeOpencode, `#!/usr/bin/env bash\nexec "${process.execPath}" "$(dirname "$0")/fake-opencode.cjs" "$@"\n`, 'utf8');
-  chmodSync(fakeOpencode, 0o755);
-}
-
-process.env.AGENT_LOOP_WORKER_EXECUTABLE = fakeOpencode;
+process.env.AGENT_LOOP_WORKER_EXECUTABLE = process.execPath;
+process.env.AGENT_LOOP_WORKER_EXECUTABLE_ARGS = JSON.stringify([fakeScript]);
 process.env.AGENT_LOOP_FAKE_LOG = fakeLog;
 process.env.AGENT_LOOP_FORK_DISABLED = '1';
 process.env.AGENT_LOOP_BUDGET_STATE_PATH = resolve(dir, 'budgets.json');
@@ -72,6 +63,6 @@ const blocked = await plugin.tool.agent_loop.execute({ task: 'nested', mode: 'bu
 delete process.env.AGENT_LOOP_CHILD;
 assert.equal(JSON.parse(blocked.output).code, 'AGENT_LOOP_RECURSION_BLOCKED');
 
-for (const key of ['AGENT_LOOP_WORKER_EXECUTABLE', 'AGENT_LOOP_FAKE_LOG', 'AGENT_LOOP_FORK_DISABLED', 'AGENT_LOOP_BUDGET_STATE_PATH', 'AGENT_LOOP_EVENT_LOG_PATH']) delete process.env[key];
+for (const key of ['AGENT_LOOP_WORKER_EXECUTABLE', 'AGENT_LOOP_WORKER_EXECUTABLE_ARGS', 'AGENT_LOOP_FAKE_LOG', 'AGENT_LOOP_FORK_DISABLED', 'AGENT_LOOP_BUDGET_STATE_PATH', 'AGENT_LOOP_EVENT_LOG_PATH']) delete process.env[key];
 rmSync(dir, { recursive: true, force: true });
 console.log('tool-integration-tests: passed');
