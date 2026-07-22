@@ -77,3 +77,17 @@ The specific commits (in order):
 8. `fix(opencode): capture retry status in task tool release phase before child cancel`
 9. `fix(opencode): make FreeUsageLimitError non-retryable to unblock orchestrator fallback`
 10. `fix(opencode): only retry truly transient errors, fail fast for all others`
+11. `fix: make session title generation error-resilient with heuristic fallback`
+
+### Title Generation Fix
+
+The latest commit addresses a side effect of the retry changes: session title generation
+(the "New session" name issue). When the LLM call for generating a session title fails
+(rate limit, quota, timeout), two safeguards now apply:
+
+1. **Broader getSmallModel fallback** - For opencode providers, the small model search
+   now tries gemini-flash and claude-haiku families after gpt-nano, making it more
+   likely to find a working model for lightweight tasks like title generation.
+2. **Heuristic fallback title** - If the LLM call fails entirely, the system extracts a
+   title from the user first message text instead of leaving the default "New session" name.
+
