@@ -90,7 +90,7 @@ export default async function AgentLoopPlugin() {
             const result = await runAgentLoop({
               task,
               mode: args.mode || 'build',
-              maxRetries: args.maxRetries || 0,
+              maxRetries: args.maxRetries,
               cwd: context.directory,
               parentSessionId: context.sessionID,
               signal: context.abort,

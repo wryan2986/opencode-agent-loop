@@ -77,7 +77,7 @@ function budgetFailure({ taskId, budget, smokeResults = null, eventLogPath = '' 
 export async function runAgentLoop({
   task,
   mode = 'build',
-  maxRetries = 0,
+  maxRetries,
   cwd = process.cwd(),
   parentSessionId,
   metadata = {},
@@ -102,6 +102,10 @@ export async function runAgentLoop({
   }
 
   const config = loadConfig(DEFAULT_CONFIG_PATH);
+  const configuredRetryLimit = Number.isInteger(config?.retry?.max_retries) ? config.retry.max_retries : 0;
+  const effectiveMaxRetries = Number.isInteger(maxRetries)
+    ? Math.max(0, Math.min(maxRetries, 5))
+    : Math.max(0, Math.min(configuredRetryLimit, 5));
   const smokeTestEnabled = config?.general?.smoke_test_enabled !== false;
   const events = new AgentLoopEventLogger({
     taskId,
@@ -117,7 +121,7 @@ export async function runAgentLoop({
     cwd
   });
   const callBudget = budgetTracker.recordWorkflowCall(mode);
-  events.emit('workflow.call', { stage: mode, data: { mode, maxRetries, budget: callBudget } });
+  events.emit('workflow.call', { stage: mode, data: { mode, maxRetries: effectiveMaxRetries, budget: callBudget } });
   if (!budgetTracker.canContinue()) {
     events.emit('budget.exceeded', { stage: mode, data: { budget: callBudget } });
     return budgetFailure({ taskId, budget: callBudget, eventLogPath: events.path });
@@ -266,7 +270,7 @@ export async function runAgentLoop({
     budgetTaskId: taskId,
     budgetStep: step.label,
     registryPath: DEFAULT_REGISTRY_PATH,
-    maxRetries,
+    maxRetries: effectiveMaxRetries,
     eventLogger: events
   };
   if (smokeResults?.responsive.length) {

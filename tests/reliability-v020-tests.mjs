@@ -88,7 +88,7 @@ async function testSameModelRetryBeforeFailover() {
     cooldowns: { default_cooldown_minutes: 1 },
     provider_timeouts_ms: { default: 1000 },
     retry: {
-      max_retries: 2, base_delay_ms: 0, max_delay_ms: 0, jitter_factor: 0,
+      max_retries: 1, base_delay_ms: 0, max_delay_ms: 0, jitter_factor: 0,
       retryable_http_codes: [429, 500, 502, 503, 504],
       retryable_errors: ['ETIMEDOUT'],
       non_retryable_errors: ['BUDGET_EXCEEDED']
@@ -117,7 +117,6 @@ async function testSameModelRetryBeforeFailover() {
     poolsPath,
     registryPath,
     logDir: dir,
-    maxRetries: 1,
     workerAdapter: async ({ model }) => {
       calls.push(model);
       if (calls.length === 1) return { success: false, code: 'ETIMEDOUT', timedOut: true, exitCode: 1, stdout: '', stderr: 'timeout' };

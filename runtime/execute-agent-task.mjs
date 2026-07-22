@@ -124,14 +124,13 @@ export async function executeAgentTask({
   progressCallback,
   budgetTaskId = taskId,
   budgetStep = role,
-  maxRetries = 0,
+  maxRetries,
   eventLogger
 }) {
   if (!role) throw new Error('executeAgentTask requires role');
   if (!agent) throw new Error('executeAgentTask requires agent');
   if (!prompt) throw new Error('executeAgentTask requires prompt');
 
-  const retryLimit = Number.isInteger(maxRetries) ? Math.max(0, Math.min(maxRetries, 5)) : 0;
   const events = eventLogger || new AgentLoopEventLogger({ taskId: budgetTaskId, cwd });
   mkdirSync(logDir, { recursive: true });
   const logPath = resolve(logDir, `${taskId}-${role}.jsonl`);
@@ -158,6 +157,12 @@ export async function executeAgentTask({
   }
 
   const freeFirstConfig = loadFreeFirstConfig(configPath);
+  const configuredRetryLimit = Number.isInteger(freeFirstConfig?.retry?.max_retries)
+    ? freeFirstConfig.retry.max_retries
+    : 0;
+  const retryLimit = Number.isInteger(maxRetries)
+    ? Math.max(0, Math.min(maxRetries, 5))
+    : Math.max(0, Math.min(configuredRetryLimit, 5));
   const { providerTimeouts, latencyTimeoutMapping } = extractProviderTimeoutConfig(freeFirstConfig);
   const budgetTracker = BudgetTracker.fromFiles({
     taskId: budgetTaskId,
