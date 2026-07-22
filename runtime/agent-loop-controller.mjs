@@ -3,6 +3,7 @@ import { assertCanStartLoop, getCurrentDepth } from './recursion-guard.mjs';
 import { loadPoolConfig, normalizePoolConfig, isModelCoolingDown } from '../lib/pool-normalizer.mjs';
 import { runSmokeTest, filterResponsiveModels } from '../lib/smoke-test.mjs';
 import { reapExpiredCooldowns, filterRetiredModels, loadRegistry } from '../lib/cooldown-manager.mjs';
+import { BudgetTracker } from '../lib/budget-manager.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +12,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, '..');
 const DEFAULT_CONFIG_PATH = resolve(PACKAGE_ROOT, 'config/free-first-config.json');
 const DEFAULT_POOLS_PATH = resolve(PACKAGE_ROOT, 'config/free-first-pools.json');
+const DEFAULT_REGISTRY_PATH = resolve(PACKAGE_ROOT, 'config/model-registry.json');
 
 function loadConfig(path) {
   try { return JSON.parse(readFileSync(path, 'utf-8')); } catch { return {}; }
@@ -79,6 +81,18 @@ export async function runAgentLoop({
 
   const config = loadConfig(DEFAULT_CONFIG_PATH);
   const smokeTestEnabled = config?.general?.smoke_test_enabled !== false;
+  const budgetTracker = BudgetTracker.fromFiles({
+    taskId,
+    step: 'smoke',
+    configPath: DEFAULT_CONFIG_PATH,
+    registryPath: DEFAULT_REGISTRY_PATH
+  });
+  const onSmokeUsage = ({ modelId, usage, reportedCostUsd }) => budgetTracker.recordUsage({
+    modelId,
+    usage,
+    reportedCostUsd,
+    step: 'smoke'
+  });
 
   // --- Smoke test mode: test models and return results ---
   if (mode === 'smoke') {
@@ -103,9 +117,20 @@ export async function runAgentLoop({
         providerTimeouts: config?.provider_timeouts_ms || {},
         smokeTestTimeoutMs: config?.general?.smoke_test_default_timeout_ms || 30000,
         smokeTestProviderTimeouts: config?.smoke_test_provider_timeout_ms || {},
-        cwd, env: { ...env, AGENT_LOOP_DEPTH: String(getCurrentDepth() + 1) }, signal, progressCallback
+        cwd, env: { ...env, AGENT_LOOP_DEPTH: String(getCurrentDepth() + 1) }, signal, progressCallback, onUsage: onSmokeUsage
       });
       await updateProgress(progressCallback, `Smoke test: ${smokeResults.responsive.length}/${smokeResults.responsive.length + smokeResults.unresponsive.length} responsive`, { smoke: { responsive: smokeResults.responsive, unresponsive: smokeResults.unresponsive }, status: 'smoke-done' });
+    }
+    if (smokeResults?.budgetExceeded || !budgetTracker.canContinue()) {
+      const budget = budgetTracker.snapshot();
+      return {
+        status: 'failed', code: 'BUDGET_EXCEEDED', taskId,
+        summary: budget.exceededReasons.join('; ') || 'Task budget exceeded during smoke test.',
+        successfulModel: null, attemptedModels: [], changedFiles: [],
+        smokeResults, budget,
+        tests: { status: 'not-run', commands: [] }, review: { status: 'not-run' },
+        requiresUserInput: false, logPath: '', steps: [{ step: 'smoke', status: 'failed', code: 'BUDGET_EXCEEDED', budget }]
+      };
     }
     const hasResponsive = smokeResults && smokeResults.responsive.length > 0;
     return {
@@ -115,7 +140,8 @@ export async function runAgentLoop({
       smokeResults: smokeResults ? { responsive: smokeResults.responsive, unresponsive: smokeResults.unresponsive } : null,
       tests: { status: 'not-run', commands: [] }, review: { status: 'not-run' },
       requiresUserInput: !hasResponsive, logPath: '',
-      steps: [{ step: 'smoke', status: hasResponsive ? 'completed' : 'failed', attemptedModels: (smokeResults?.responsive || []).map(r => r.modelId), smokeResults: { responsive: smokeResults?.responsive || [], unresponsive: smokeResults?.unresponsive || [] } }]
+      budget: budgetTracker.snapshot(),
+      steps: [{ step: 'smoke', status: hasResponsive ? 'completed' : 'failed', attemptedModels: (smokeResults?.responsive || []).map(r => r.modelId), smokeResults: { responsive: smokeResults?.responsive || [], unresponsive: smokeResults?.unresponsive || [] }, budget: budgetTracker.snapshot() }]
     };
   }
 
@@ -145,9 +171,13 @@ export async function runAgentLoop({
         models: filteredModels, providerTimeouts: config?.provider_timeouts_ms || {},
         smokeTestTimeoutMs: config?.general?.smoke_test_default_timeout_ms || 30000,
         smokeTestProviderTimeouts: config?.smoke_test_provider_timeout_ms || {},
-        cwd, env: { ...env, AGENT_LOOP_DEPTH: String(getCurrentDepth() + 1) }, signal, progressCallback
+        cwd, env: { ...env, AGENT_LOOP_DEPTH: String(getCurrentDepth() + 1) }, signal, progressCallback, onUsage: onSmokeUsage
       });
       await updateProgress(progressCallback, `Smoke test: ${smokeResults.responsive.length}/${smokeResults.responsive.length + smokeResults.unresponsive.length} responsive`, { smoke: { responsive: smokeResults.responsive, unresponsive: smokeResults.unresponsive }, status: 'smoke-done' });
+    }
+    if (smokeResults?.budgetExceeded || !budgetTracker.canContinue()) {
+      const budget = budgetTracker.snapshot();
+      return { status: 'failed', code: 'BUDGET_EXCEEDED', taskId, summary: budget.exceededReasons.join('; ') || 'Task budget exceeded during smoke test.', successfulModel: null, attemptedModels: [], changedFiles: [], smokeResults, budget, tests: { status: 'not-run', commands: [] }, review: { status: 'not-run' }, requiresUserInput: false, logPath: '', steps: [{ step: 'smoke', status: 'failed', code: 'BUDGET_EXCEEDED', budget }] };
     }
     if (smokeResults && smokeResults.responsive.length === 0 && smokeResults.unresponsive.length > 0) {
       await updateProgress(progressCallback, 'All providers unresponsive', { status: 'blocked' });
@@ -168,7 +198,10 @@ export async function runAgentLoop({
     taskId: `${taskId}-${step.label}`, role: step.role, agent: step.agent, prompt,
     cwd, parentSessionId, metadata, timeoutMs, signal, workerAdapter,
     env: { ...env, AGENT_LOOP_DEPTH: String(getCurrentDepth() + 1) },
-    progressCallback
+    progressCallback,
+    budgetTaskId: taskId,
+    budgetStep: step.label,
+    registryPath: DEFAULT_REGISTRY_PATH
   };
   if (smokeResults && smokeResults.responsive.length > 0) {
     // Filter smoke-responsive models through registry retirement check so
@@ -186,8 +219,11 @@ export async function runAgentLoop({
 
   return {
     status: stepStatus === 'passed' ? 'completed' : 'failed',
+    code: result.code || null,
     taskId,
-    summary: stepStatus === 'passed' ? `Agent loop completed (${step.label}).` : `${step.label} step did not pass.`,
+    summary: result.code === 'BUDGET_EXCEEDED'
+      ? (result.budget?.exceededReasons?.join('; ') || 'Task budget exceeded.')
+      : stepStatus === 'passed' ? `Agent loop completed (${step.label}).` : `${step.label} step did not pass.`,
     successfulModel: result.successfulModel || null,
     attemptedModels: result.attemptedModels || [],
     changedFiles: [],
@@ -196,12 +232,14 @@ export async function runAgentLoop({
     review: { status: step.label === 'review' ? stepStatus : 'not-run' },
     requiresUserInput: result.code === 'FREE_MODELS_EXHAUSTED',
     logPath: result.logPath || '',
+    budget: result.budget || budgetTracker.snapshot(),
     steps: [{
       step: step.label, status: stepStatus,
       successfulModel: result.successfulModel,
       attemptedModels: result.attemptedModels,
       code: result.code, logPath: result.logPath,
       attemptDetails: result.attemptDetails || null,
+      budget: result.budget || budgetTracker.snapshot(),
       smokeResults: smokeResults ? { responsive: smokeResults.responsive, unresponsive: smokeResults.unresponsive } : null,
       stepStartedAt: new Date().toISOString()
     }]

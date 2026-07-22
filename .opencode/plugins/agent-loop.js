@@ -16,10 +16,15 @@ function concise(result) {
       code: a.code,
       startedAt: a.startedAt,
       finishedAt: a.finishedAt,
-      progressLogPath: a.progressLogPath
+      progressLogPath: a.progressLogPath,
+      usage: a.usage || undefined,
+      reportedCostUsd: a.reportedCostUsd || 0,
+      budgetExceeded: a.budgetExceeded === true,
+      budget: a.budget || undefined
     })) : undefined,
     smokeResults: s.smokeResults || undefined,
-    stepStartedAt: s.stepStartedAt || undefined
+    stepStartedAt: s.stepStartedAt || undefined,
+    budget: s.budget || undefined
   }));
 
   return {
@@ -35,6 +40,7 @@ function concise(result) {
     review: result.review,
     requiresUserInput: result.requiresUserInput === true,
     logPath: result.logPath,
+    budget: result.budget || undefined,
     steps
   };
 }
@@ -48,7 +54,8 @@ export default async function AgentLoopPlugin() {
           task: tool.schema.string().min(1).describe('The complete user request to run through the agent loop.'),
           mode: tool.schema.enum(['build', 'test', 'review', 'smoke', 'escalate']).optional().describe('Which role to run: build, test, review, smoke (model test), or escalate (GPT-5.5 diagnosis)'),
           maxRetries: tool.schema.number().int().min(0).max(5).optional().describe('Maximum task-level retry cycles. Provider failover is handled separately.'),
-          models: tool.schema.array(tool.schema.string()).optional().describe('Pre-verified model IDs from a prior smoke call to restrict which models are used.')
+          models: tool.schema.array(tool.schema.string()).optional().describe('Pre-verified model IDs from a prior smoke call to restrict which models are used.'),
+          taskId: tool.schema.string().min(1).max(128).optional().describe('Stable task ID used to share token and cost budgets across build, test, and review calls.')
         },
         async execute(args, context) {
           if (process.env.AGENT_LOOP_CHILD === '1') {
@@ -91,7 +98,8 @@ export default async function AgentLoopPlugin() {
                 maxDepth: Number.parseInt(process.env.AGENT_LOOP_MAX_DEPTH || '1', 10)
               },
               progressCallback,
-              forceModels: args.models || undefined
+              forceModels: args.models || undefined,
+              taskId: args.taskId || undefined
             });
             const cr = concise(result);
             const status = result.status;

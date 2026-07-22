@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { normalizeTokenUsage } from '../lib/budget-manager.mjs';
 
 const activeChildren = new Set();
 
@@ -62,6 +63,26 @@ function parseJsonEvents(stdout) {
   return events;
 }
 
+export function extractUsageFromEvent(event) {
+  const part = event?.part || event?.properties?.part;
+  if (!part || (event?.type !== 'step_finish' && part.type !== 'step-finish')) return null;
+  const usage = normalizeTokenUsage(part.tokens || event.tokens || {});
+  const reportedCostUsd = Number(part.cost ?? event.cost ?? 0);
+  return {
+    usage,
+    reportedCostUsd: Number.isFinite(reportedCostUsd) && reportedCostUsd >= 0 ? reportedCostUsd : 0
+  };
+}
+
+function addUsage(target, usage) {
+  target.input += usage.input;
+  target.output += usage.output;
+  target.reasoning += usage.reasoning;
+  target.cacheRead += usage.cacheRead;
+  target.cacheWrite += usage.cacheWrite;
+  target.total += usage.total;
+}
+
 function extractSessionId(stdout, stderr) {
   for (const event of parseJsonEvents(stdout)) {
     const id = event.sessionID || event.sessionId || event.session?.id || event.properties?.sessionID;
@@ -85,7 +106,8 @@ export async function runOpenCodeWorker({
   progressLogPath,
   providerTimeouts = {},
   latencyTimeoutMapping = {},
-  stdoutTailCallback
+  stdoutTailCallback,
+  onUsage
 }) {
   if (!cwd) throw new Error('runOpenCodeWorker requires cwd');
   if (!agent) throw new Error('runOpenCodeWorker requires agent');
@@ -136,8 +158,59 @@ export async function runOpenCodeWorker({
     let timedOut = false;
     let lastActivityAt = Date.now();
     let lastTailTs = 0;
+    let jsonLineBuffer = '';
+    let usageEvents = 0;
+    let reportedCostUsd = 0;
+    let budgetExceeded = false;
+    let budgetSnapshot = null;
+    const usage = normalizeTokenUsage();
     const TAIL_LINES = 20;
     const TAIL_THROTTLE_MS = 2000;
+
+    function consumeJsonOutput(text, flush = false) {
+      jsonLineBuffer += text;
+      const lines = jsonLineBuffer.split(/\r?\n/);
+      const tail = lines.pop() || '';
+      jsonLineBuffer = flush ? '' : tail;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('{')) continue;
+        try {
+          const event = JSON.parse(trimmed);
+          const extracted = extractUsageFromEvent(event);
+          if (!extracted) continue;
+          usageEvents += 1;
+          addUsage(usage, extracted.usage);
+          reportedCostUsd += extracted.reportedCostUsd;
+          if (onUsage && !budgetExceeded) {
+            const decision = onUsage({
+              modelId: model,
+              usage: extracted.usage,
+              reportedCostUsd: extracted.reportedCostUsd,
+              event
+            });
+            if (decision?.exceeded === true || decision?.allowed === false) {
+              budgetExceeded = true;
+              budgetSnapshot = decision;
+              if (!child.killed) child.kill('SIGTERM');
+            }
+          }
+        } catch {
+          // Ignore non-JSON output mixed into the stream.
+        }
+      }
+      if (flush && tail.trim().startsWith('{')) {
+        try {
+          const event = JSON.parse(tail.trim());
+          const extracted = extractUsageFromEvent(event);
+          if (extracted) {
+            usageEvents += 1;
+            addUsage(usage, extracted.usage);
+            reportedCostUsd += extracted.reportedCostUsd;
+          }
+        } catch {}
+      }
+    }
 
     function getStdoutTail() {
       const lines = stdout.split('\n').filter(Boolean);
@@ -176,7 +249,9 @@ export async function runOpenCodeWorker({
     }
 
     child.stdout?.on('data', chunk => {
-      stdout += chunk.toString();
+      const text = chunk.toString();
+      stdout += text;
+      consumeJsonOutput(text);
       lastActivityAt = Date.now();
       // Throttled tail callback for TUI metadata
       if (stdoutTailCallback) {
@@ -201,9 +276,13 @@ export async function runOpenCodeWorker({
       activeChildren.delete(child);
       flushProgress();
       const providerError = extractProviderError({ stdout, stderr: `${stderr}\n${error.message}`, exitCode: -1 });
+      consumeJsonOutput('', true);
       resolve({
         success: false, stdout, stderr, exitCode: -1, signal: null, error,
         timedOut: false, lastActivityAt,
+        usage, reportedCostUsd, usageEvents,
+        usageReportedIncrementally: usageEvents > 0,
+        budgetExceeded, budget: budgetSnapshot,
         ...providerError
       });
     });
@@ -213,10 +292,11 @@ export async function runOpenCodeWorker({
       activeChildren.delete(child);
       if (signal) signal.removeEventListener?.('abort', abort);
       flushProgress();
+      consumeJsonOutput('', true);
       const providerError = extractProviderError({ stdout, stderr, exitCode });
       const session = extractSessionId(stdout, stderr);
       resolve({
-        success: exitCode === 0 && !timedOut,
+        success: exitCode === 0 && !timedOut && !budgetExceeded,
         stdout,
         stderr,
         exitCode,
@@ -224,9 +304,15 @@ export async function runOpenCodeWorker({
         timedOut,
         sessionId: session,
         lastActivityAt,
-        error: exitCode === 0 && !timedOut ? undefined : providerError,
+        usage,
+        reportedCostUsd,
+        usageEvents,
+        usageReportedIncrementally: usageEvents > 0,
+        budgetExceeded,
+        budget: budgetSnapshot,
+        error: exitCode === 0 && !timedOut && !budgetExceeded ? undefined : providerError,
         statusCode: providerError.statusCode,
-        code: timedOut ? 'ETIMEDOUT' : providerError.code
+        code: budgetExceeded ? 'BUDGET_EXCEEDED' : timedOut ? 'ETIMEDOUT' : providerError.code
       });
     });
   });

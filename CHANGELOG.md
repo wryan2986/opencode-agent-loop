@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Added configurable per-task token and cost budgets with live OpenCode usage tracking, model-registry pricing estimates, failover interruption, and structured budget output. Closes #4.
+
 ## [0.1.1] - 2026-07-22
 
 ### Fixed
