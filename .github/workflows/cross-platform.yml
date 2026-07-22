@@ -26,6 +26,22 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run validate:portable
+      - name: Test installer in POSIX shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_home="$PWD/.installer-test-home"
+          test_bin="$PWD/.installer-test-bin"
+          mkdir -p "$test_home" "$test_bin"
+          : > "$test_home/.bashrc"
+          cat > "$test_bin/opencode" <<'EOF'
+          #!/usr/bin/env bash
+          exit 0
+          EOF
+          chmod +x "$test_bin/opencode"
+          HOME="$test_home" PATH="$test_bin:$PATH" bash scripts/install.sh
+          grep -F 'OPENCODE_CONFIG_DIR=' "$test_home/.bashrc"
+          rm -rf "$test_home" "$test_bin"
 
   bash-installation:
     runs-on: ubuntu-latest
