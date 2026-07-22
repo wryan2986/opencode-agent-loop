@@ -54,12 +54,8 @@ if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets)) {
   const total = budgets.max_tokens_per_task;
   const input = budgets.max_input_tokens_per_task;
   const output = budgets.max_output_tokens_per_task;
-  if (total !== null && input !== null && input > total) {
-    fail('input token limit cannot exceed total token limit');
-  }
-  if (total !== null && output !== null && output > total) {
-    fail('output token limit cannot exceed total token limit');
-  }
+  if (total !== null && input !== null && input > total) fail('input token limit cannot exceed total token limit');
+  if (total !== null && output !== null && output > total) fail('output token limit cannot exceed total token limit');
   if (total !== null && input !== null && output !== null && input + output > total) {
     fail('input plus output token limits cannot exceed total token limit');
   }
@@ -80,7 +76,16 @@ if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets)) {
   }
 }
 
-if (config.provider_timeouts_ms?.local !== config.general?.local_model_request_timeout_seconds * 1000) {
+const general = config.general || {};
+for (const key of ['paid_fallback_global_window_minutes', 'paid_fallback_task_state_ttl_minutes']) {
+  nonNegativeNumber(general[key], `general.${key}`, { integer: true });
+  if (general[key] < 1) fail(`general.${key} must be at least 1`);
+}
+for (const key of ['paid_fallback_log_path', 'paid_fallback_state_path']) {
+  if (typeof general[key] !== 'string' || !general[key]) fail(`general.${key} must be a non-empty string`);
+}
+
+if (config.provider_timeouts_ms?.local !== general.local_model_request_timeout_seconds * 1000) {
   fail('provider_timeouts_ms.local must match general.local_model_request_timeout_seconds');
 }
 if (!config.events || config.events.schema_version !== '1.0.0') fail('events.schema_version must be 1.0.0');
