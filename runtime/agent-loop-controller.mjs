@@ -4,7 +4,7 @@ import { loadPoolConfig, normalizePoolConfig, isModelCoolingDown } from '../lib/
 import { runSmokeTest } from '../lib/smoke-test.mjs';
 import { reapExpiredCooldowns, filterRetiredModels, loadRegistry } from '../lib/cooldown-manager.mjs';
 import { BudgetTracker } from '../lib/budget-manager.mjs';
-import { AgentLoopEventLogger } from '../lib/event-log.mjs';
+import { AgentLoopEventLogger, defaultEventLogPath } from '../lib/event-log.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -103,7 +103,12 @@ export async function runAgentLoop({
 
   const config = loadConfig(DEFAULT_CONFIG_PATH);
   const smokeTestEnabled = config?.general?.smoke_test_enabled !== false;
-  const events = new AgentLoopEventLogger({ taskId, cwd });
+  const events = new AgentLoopEventLogger({
+    taskId,
+    cwd,
+    enabled: config?.events?.enabled !== false,
+    path: defaultEventLogPath(cwd, config?.events?.path || '.opencode/agent-loop-state/events.jsonl')
+  });
   const budgetTracker = BudgetTracker.fromFiles({
     taskId,
     step: mode,
