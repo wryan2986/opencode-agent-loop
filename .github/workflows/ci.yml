@@ -102,3 +102,27 @@ jobs:
             exit 1
           fi
           echo "No committed environment files found."
+
+  apply-windows-test-paths:
+    if: github.event_name == 'pull_request' && github.head_ref == 'release/v0.2.0-reliability' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/v0.2.0-reliability
+      - name: Apply Windows-safe test paths
+        run: node scripts/apply-windows-test-paths.mjs
+      - name: Commit transformed test
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add tests/runtime-tests.mjs
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "test: use Windows-safe repository paths"
+          git push origin HEAD:release/v0.2.0-reliability
