@@ -1,6 +1,12 @@
 name: OpenCode patch compatibility
 
 on:
+  pull_request:
+    branches: [main, master]
+    paths:
+      - patches/opencode-subagent-failure-exposure.patch
+      - scripts/check-opencode-patch-contract.mjs
+      - .github/workflows/opencode-patch-compat.yml
   workflow_dispatch:
     inputs:
       opencode_ref:
