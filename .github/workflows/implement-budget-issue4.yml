@@ -1,0 +1,46 @@
+name: Implement issue 4 budget enforcement
+
+on:
+  push:
+    branches:
+      - feature/issue-4-budget-enforcement
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/issue-4-budget-enforcement
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Apply budget implementation
+        run: node scripts/implement-budget-issue4.mjs
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Commit implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat: enforce per-task token and cost budgets"
+          git push origin HEAD:feature/issue-4-budget-enforcement
