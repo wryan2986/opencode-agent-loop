@@ -51,20 +51,11 @@ jobs:
           if (failed) process.exit(1);
           EOF
 
-      - name: Check agent frontmatter
-        run: |
-          errors=0
-          for file in agents/*.md; do
-            if ! head -n 1 "$file" | grep -qx -- '---'; then
-              echo "FAIL: $file is missing opening frontmatter"
-              errors=$((errors + 1))
-            fi
-            if [ "$(grep -c '^---$' "$file")" -lt 2 ]; then
-              echo "FAIL: $file has unclosed frontmatter"
-              errors=$((errors + 1))
-            fi
-          done
-          test "$errors" -eq 0
+      - name: Validate agent permissions
+        run: bash scripts/validate-agent-configs.sh
+
+      - name: Check routing defaults
+        run: node scripts/check-routing-defaults.mjs
 
       - name: Check documentation links
         run: node scripts/check-doc-links.mjs
