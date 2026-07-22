@@ -2,9 +2,12 @@ import { strict as assert } from 'node:assert';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { normalizePoolConfig, PoolConfigError, retiredModelSet } from '../lib/pool-normalizer.mjs';
 import { executeAgentTask } from '../runtime/execute-agent-task.mjs';
 import { assertCanStartLoop } from '../runtime/recursion-guard.mjs';
+const PACKAGE_ROOT = fileURLToPath(new URL('..', import.meta.url));
+
 import {
   loadState,
   saveState,
@@ -715,14 +718,14 @@ async function testTaskFailureDoesNotTriggerCooldown() {
 
 async function testPluginRegistrationInConfig() {
   // Verify that opencode.json contains the agent-loop.js plugin reference
-  const configText = readFileSync(resolve(new URL('..', import.meta.url).pathname, 'opencode.json'), 'utf-8');
+  const configText = readFileSync(resolve(PACKAGE_ROOT, 'opencode.json'), 'utf-8');
   assert.ok(configText.includes('agent-loop.js'), 'opencode.json should reference agent-loop.js plugin');
   return { name: 'Plugin registration present in opencode.json', passed: true };
 }
 
 async function testReviewPermissionsValidFormat() {
   // Verify review.md has edit: deny in any valid format (indented or top-level)
-  const reviewText = readFileSync(resolve(new URL('..', import.meta.url).pathname, 'agents/review.md'), 'utf-8');
+  const reviewText = readFileSync(resolve(PACKAGE_ROOT, 'agents/review.md'), 'utf-8');
   const hasIndented = /\s+edit: deny/.test(reviewText);
   assert.ok(hasIndented, 'review.md should contain edit: deny (indented or top-level)');
   return { name: 'Review permissions in valid nested format', passed: true };
