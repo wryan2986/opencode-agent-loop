@@ -81,16 +81,21 @@ for FILE in "$AGENTS_DIR"/*.md; do
   fi
 
   if printf '%s\n' "$FRONTMATTER" | grep -Eq '^  bash:'; then
-    REQUIRED_DENIALS="push reset clean checkout restore"
-    if [[ "$MODE" == "subagent" ]]; then
-      REQUIRED_DENIALS="commit $REQUIRED_DENIALS"
-    fi
-
-    for COMMAND in $REQUIRED_DENIALS; do
-      if ! printf '%s\n' "$FRONTMATTER" | grep -Eq "^[[:space:]]{4}[\"']?git ${COMMAND}\\*[\"']?:[[:space:]]*deny[[:space:]]*$"; then
-        report_failure "$FILE" "missing explicit bash denial for 'git ${COMMAND}*'"
+    # A catch-all deny is already stricter than individual destructive-command
+    # denials. Otherwise require explicit Git patterns so a permissive wildcard
+    # cannot accidentally authorize destructive operations.
+    if ! printf '%s\n' "$FRONTMATTER" | grep -Eq "^[[:space:]]{4}[\"']?\\*[\"']?:[[:space:]]*deny[[:space:]]*$"; then
+      REQUIRED_DENIALS="push reset clean checkout restore"
+      if [[ "$MODE" == "subagent" ]]; then
+        REQUIRED_DENIALS="commit $REQUIRED_DENIALS"
       fi
-    done
+
+      for COMMAND in $REQUIRED_DENIALS; do
+        if ! printf '%s\n' "$FRONTMATTER" | grep -Eq "^[[:space:]]{4}[\"']?git ${COMMAND}\\*[\"']?:[[:space:]]*deny[[:space:]]*$"; then
+          report_failure "$FILE" "missing explicit bash denial for 'git ${COMMAND}*'"
+        fi
+      done
+    fi
   fi
 done
 
