@@ -1,0 +1,7 @@
+{
+  "repository": "anomalyco/opencode",
+  "ref": "14a5529793a91001ca81c80e96f39533eab79127",
+  "patch": "patches/opencode-subagent-failure-exposure.patch",
+  "verified_on": "2026-07-22",
+  "notes": "Latest upstream revision confirmed patch-compatible before the current patch series was created. Scheduled CI separately probes the moving dev branch for drift."
+}
