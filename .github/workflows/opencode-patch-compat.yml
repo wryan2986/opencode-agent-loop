@@ -89,7 +89,6 @@ jobs:
 
   upstream-dev-probe:
     if: github.event_name != 'workflow_dispatch' || inputs.opencode_ref == ''
-    continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -101,11 +100,30 @@ jobs:
           path: upstream-opencode-dev
           fetch-depth: 1
       - name: Probe patch against moving dev branch
+        id: probe
         working-directory: upstream-opencode-dev
-        run: git apply --check ../patches/opencode-subagent-failure-exposure.patch
+        shell: bash
+        run: |
+          set +e
+          git apply --check ../patches/opencode-subagent-failure-exposure.patch > ../opencode-dev-patch-check.txt 2>&1
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "compatible=true" >> "$GITHUB_OUTPUT"
+            echo "### Upstream dev probe: compatible" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "compatible=false" >> "$GITHUB_OUTPUT"
+            echo "### Upstream dev probe: patch rebase needed" >> "$GITHUB_STEP_SUMMARY"
+            echo "The pinned supported revision remains the release target. See the uploaded probe artifact for details." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit 0
       - name: Record upstream revision
         if: always()
-        run: git -C upstream-opencode-dev rev-parse HEAD > opencode-dev-probe.txt
+        shell: bash
+        run: |
+          git -C upstream-opencode-dev rev-parse HEAD > opencode-dev-probe.txt
+          printf 'patch_compatible=%s\n' '${{ steps.probe.outputs.compatible }}' >> opencode-dev-probe.txt
+          cat opencode-dev-patch-check.txt >> opencode-dev-probe.txt
       - name: Upload upstream probe evidence
         if: always()
         uses: actions/upload-artifact@v4
