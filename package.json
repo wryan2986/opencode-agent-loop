@@ -1,7 +1,24 @@
 {
+  "name": "opencode-agent-loop",
+  "version": "0.1.1",
+  "description": "A structured multi-agent feature-development loop for OpenCode with free-first subagent routing and controlled paid fallback.",
   "type": "module",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wryan2986/opencode-agent-loop.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wryan2986/opencode-agent-loop/issues"
+  },
+  "homepage": "https://github.com/wryan2986/opencode-agent-loop#readme",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "test": "node tests/routing-tests.mjs && node tests/runtime-tests.mjs && node tests/tool-integration-tests.mjs && node tests/bypass-detection.mjs"
+    "test": "node tests/routing-tests.mjs && node tests/runtime-tests.mjs && node tests/tool-integration-tests.mjs && node tests/bypass-detection.mjs",
+    "validate": "bash scripts/validate.sh && node scripts/check-doc-links.mjs"
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.18.4"
