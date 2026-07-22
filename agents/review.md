@@ -1,6 +1,6 @@
 ---
 mode: subagent
-model: opencode-go/mimo-v2.5
+model: opencode/mimo-v2.5-free
 temperature: 0.1
 steps: 120
 description: >

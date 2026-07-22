@@ -145,7 +145,7 @@ See [docs/configuration.md](docs/configuration.md) for detailed configuration re
 ### Key Principles
 
 
-- **Paid-primary routing**: Each role tries paid models from multiple providers before attempting free fallback
+- **Free-first routing**: Each role tries paid models from multiple providers before attempting free fallback
 - **Provider diversity**: No single provider is a single point of failure
 - **Cooldown management**: Models that fail (429, 503, timeout) are placed in cooldown for configurable durations
 - **Task state preservation**: Task state is checkpointed before switching models

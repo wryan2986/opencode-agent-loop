@@ -1,6 +1,6 @@
 ---
 mode: subagent
-model: opencode-go/deepseek-v4-flash
+model: openai/gpt-5.6-luna
 temperature: 0.15
 reasoning_effort: medium
 steps: 120

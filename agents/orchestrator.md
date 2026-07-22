@@ -478,9 +478,9 @@ This deletes sessions matching `smoke-test`, `(fork`, or `task-` patterns. The c
 - **After EVERY fix cycle, you MUST delegate VERIFYING + REVIEWING to subagents.** Do not run verification yourself, regardless of how small the fix is. Only the test agent may verify; only the review agent may review. Violating this rule bypasses the independent gate and can allow regressions through.
 - **Always specify timeouts when delegating commands to subagents.** Include explicit timeout expectations in every prompt. If a subagent runs a command that could hang (server start, curl, long test suite), instruct them to use the bash tool's `timeout` parameter and to kill and report any command that stalls without output for 30+ seconds.
 
-## Paid-primary cloud routing
+## Free-first cloud routing
 
-This system is configured for paid-primary cloud routing. Paid models from opencode-go are tried first, with free models as fallback when paid models are unavailable. Follow these rules:
+This system is configured for free-first cloud routing. Paid models from opencode-go are tried first, with free models as fallback when paid models are unavailable. Follow these rules:
 
 ### Model selection
 
@@ -494,9 +494,9 @@ This system is configured for paid-primary cloud routing. Paid models from openc
 - Smoke test runs before each role to filter responsive models
    The orchestrator selects the right subagent type based on the current `builderTier` in the state file.
 3. For each pool, try models in order:
- a. Paid primary model first
- b. Secondary paid model (different provider)
- c. Free fallback (last resort)
+ a. Primary free/local model first
+ b. Secondary free model (different provider)
+ c. Paid fallback (last resort)
 4. Skip models where `enabled: false` (e.g., Qwythos local model before GPU audit).
 5. Skip models in cooldown (check `cooldown_until` field).
 6. Read `config/model-registry.json` for capability scores and privacy classification.

@@ -1,6 +1,6 @@
 ---
 mode: subagent
-model: opencode-go/mimo-v2.5
+model: nvidia/moonshotai/kimi-k2.6
 temperature: 0.15
 steps: 80
 description: >

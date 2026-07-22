@@ -1,0 +1,1587 @@
+diff --git a/packages/opencode/src/provider/classify.ts b/packages/opencode/src/provider/classify.ts
+new file mode 100644
+index 000000000..18917971b
+--- /dev/null
++++ b/packages/opencode/src/provider/classify.ts
+@@ -0,0 +1,69 @@
++import { isContextOverflow } from "@opencode-ai/llm"
++
++export type FailureCategory =
++  | "rate_limit"
++  | "quota"
++  | "auth_error"
++  | "context_overflow"
++  | "content_filter"
++  | "cancelled"
++  | "empty"
++  | "api_error"
++  | "unknown"
++
++/**
++ * Check if a message indicates rate limiting (TPM, RPM, token, request throttling).
++ * Avoids false positives for context-window exceeded errors by checking
++ * `isContextOverflow` first.
++ */
++export function isRateLimitMessage(message: string): boolean {
++  if (isContextOverflow(message)) return false
++  const lower = message.toLowerCase()
++  return (
++    lower.includes("rate limit") ||
++    lower.includes("rate-limit") ||
++    lower.includes("ratelimit") ||
++    lower.includes("too many requests") ||
++    lower.includes("rate increased too quickly") ||
++    lower.includes("tokens per minute") ||
++    lower.includes("requests per minute") ||
++    lower.includes("too many tokens") ||
++    lower.includes("resource exhausted")
++  )
++}
++
++/**
++ * Check if a message indicates quota/billing/account/free-usage exhaustion.
++ */
++export function isQuotaMessage(message: string): boolean {
++  const lower = message.toLowerCase()
++  return (
++    lower.includes("insufficient_quota") ||
++    lower.includes("insufficient quota") ||
++    lower.includes("quota exceeded") ||
++    lower.includes("usage limit") ||
++    lower.includes("free usage") ||
++    lower.includes("billing") ||
++    lower.includes("subscription") ||
++    lower.includes("freeusagelimiterror") ||
++    lower.includes("gousagelimiterror")
++  )
++}
++
++/**
++ * Check if a message / status code indicates auth/credential failure.
++ */
++export function isAuthMessage(message: string, statusCode?: number): boolean {
++  if (statusCode === 401 || statusCode === 403) return true
++  const lower = message.toLowerCase()
++  return (
++    lower.includes("unauthorized") ||
++    lower.includes("forbidden") ||
++    lower.includes("invalid api key") ||
++    lower.includes("invalid token") ||
++    lower.includes("api key not found") ||
++    lower.includes("authentication")
++  )
++}
++
++export * as ProviderClassify from "./classify"
+diff --git a/packages/opencode/src/session/processor.ts b/packages/opencode/src/session/processor.ts
+index f5a8b74d7..abb6ac5f4 100644
+--- a/packages/opencode/src/session/processor.ts
++++ b/packages/opencode/src/session/processor.ts
+@@ -19,6 +19,7 @@ import { SessionRetry } from "./retry"
+ import { SessionStatus } from "./status"
+ import { SessionSummary } from "./summary"
+ import type { Provider } from "@/provider/provider"
++import { ProviderClassify } from "@/provider/classify"
+ import { Question } from "@/question"
+ import { errorMessage } from "@/util/error"
+ import { isRecord } from "@/util/record"
+@@ -580,7 +581,74 @@ const layer = Layer.effect(
+           if (!match) continue
+           const part = match.part
+           const end = Date.now()
+-          const metadata = "metadata" in part.state && isRecord(part.state.metadata) ? part.state.metadata : {}
++          const stateMetadata = "metadata" in part.state && isRecord(part.state.metadata) ? part.state.metadata : {}
++          const partMetadata = isRecord(part.metadata) ? part.metadata : {}
++          const metadata = { ...partMetadata, ...stateMetadata }
++
++          // If the part already has subagentFailure metadata (written by TaskTool on abort),
++          // preserve it and skip the generic abort message.
++          const existingFailure = metadata.subagentFailure
++          if (existingFailure) {
++            const detail = isRecord(existingFailure) && isRecord((existingFailure as Record<string, unknown>).error)
++              ? String(((existingFailure as Record<string, unknown>).error as Record<string, unknown>).detail ?? "Task failed")
++              : "Task failed"
++            yield* session.updatePart({
++              ...part,
++              state: {
++                ...part.state,
++                status: "error",
++                error: detail,
++                metadata: { ...metadata, interrupted: true },
++                time: { start: "time" in part.state ? part.state.time.start : end, end },
++              },
++            })
++            continue
++          }
++
++          // For task tools with a child session in retry status, preserve
++          // structured retry detail instead of a generic abort message.
++          if (part.tool === "task") {
++            const childSessionID = isRecord(metadata)
++              ? (metadata.sessionId ?? metadata.sessionID) as SessionID | undefined
++              : undefined
++            if (childSessionID) {
++              const childStatus = yield* status.get(childSessionID)
++              if (childStatus.type === "retry") {
++                const msg = childStatus.message
++                const failureType: string =
++                  ProviderClassify.isAuthMessage(msg) ? "auth_error" :
++                  ProviderClassify.isQuotaMessage(msg) ? "quota" :
++                  ProviderClassify.isRateLimitMessage(msg) ? "rate_limit" :
++                  "api_error"
++                const childModel = isRecord(metadata.model) ? metadata.model as { providerID?: string; modelID?: string } : undefined
++                const subagentFailure = {
++                  status: "failed",
++                  error: {
++                    type: failureType,
++                    provider: childModel?.providerID ?? input.model.providerID,
++                    model: childModel?.modelID ?? input.model.id,
++                    detail: msg,
++                    sessionID: childSessionID,
++                    attempt: childStatus.attempt,
++                    next: childStatus.next,
++                    action: childStatus.action,
++                  },
++                }
++                yield* session.updatePart({
++                  ...part,
++                  state: {
++                    ...part.state,
++                    status: "error",
++                    error: msg,
++                    metadata: { ...metadata, subagentFailure, interrupted: true },
++                    time: { start: "time" in part.state ? part.state.time.start : end, end },
++                  },
++                })
++                continue
++              }
++            }
++          }
++
+           yield* session.updatePart({
+             ...part,
+             state: {
+diff --git a/packages/opencode/src/session/retry.ts b/packages/opencode/src/session/retry.ts
+index 4139665bd..8c7f9d9c0 100644
+--- a/packages/opencode/src/session/retry.ts
++++ b/packages/opencode/src/session/retry.ts
+@@ -2,6 +2,7 @@ import type { NamedError } from "@opencode-ai/core/util/error"
+ import { SessionV1 } from "@opencode-ai/core/v1/session"
+ import { Cause, Clock, Duration, Effect, Schedule } from "effect"
+ import { MessageV2 } from "./message-v2"
++import { ProviderClassify } from "@/provider/classify"
+ import { iife } from "@/util/iife"
+ import { isRecord } from "@/util/record"
+ 
+@@ -65,89 +66,46 @@ export function delay(attempt: number, error?: SessionV1.APIError) {
+   return cap(Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS))
+ }
+ 
+-export function retryable(error: Err, provider: string) {
+-  // context overflow errors should not be retried
++export function retryable(error: Err, provider: string): Retryable | undefined {
++  // Permanently non-retryable errors — retrying the same model will produce
++  // the same error. Let the error propagate so the orchestrator can switch
++  // to a working model or escalate.
+   if (SessionV1.ContextOverflowError.isInstance(error)) return undefined
+   if (SessionV1.APIError.isInstance(error)) {
+     const status = error.data.statusCode
+-    // 5xx errors are transient server failures and should always be retried,
+-    // even when the provider SDK doesn't explicitly mark them as retryable.
+-    if (!error.data.isRetryable && !(status !== undefined && status >= 500)) return undefined
+-    if (error.data.responseBody?.includes("FreeUsageLimitError")) {
+-      return {
+-        message: GO_UPSELL_MESSAGE,
+-        action: {
+-          reason: "free_tier_limit",
+-          provider,
+-          title: "Free limit reached",
+-          message: "Subscribe to OpenCode Go for reliable access to the best open-source models, starting at $5/month.",
+-          label: "subscribe",
+-          link: GO_UPSELL_URL,
+-        },
+-      }
+-    }
+-    if (error.data.responseBody?.includes("GoUsageLimitError")) {
+-      const body = parseJSON(error.data.responseBody)
+-      const workspace = str(body?.metadata?.workspace)
+-      const limitName = str(body?.metadata?.limitName)
+-      const retryAfter = num(error.data.responseHeaders?.["retry-after"])
+-      const resetIn = iife(() => {
+-        if (retryAfter === undefined) return ""
+-        const seconds = Math.max(0, Math.ceil(retryAfter))
+-        const days = Math.floor(seconds / 86_400)
+-        const hours = Math.floor((seconds % 86_400) / 3_600)
+-        const minutes = Math.ceil((seconds % 3_600) / 60)
+-        const unit = (value: number, name: string) => `${value} ${name}${value === 1 ? "" : "s"}`
+-
+-        if (days > 0) return hours > 0 ? `${unit(days, "day")} ${unit(hours, "hour")}` : unit(days, "day")
+-        if (hours > 0) return minutes > 0 ? `${unit(hours, "hour")} ${unit(minutes, "minute")}` : unit(hours, "hour")
+-        return minutes > 0 ? unit(minutes, "minute") : "less than a minute"
+-      })
+-
+-      const message = `${limitName ? `${limitName} usage limit` : "Usage limit"} reached. It will reset in ${resetIn}. To continue using this model now, enable usage from your available balance`
+-
+-      const link = `https://opencode.ai/workspace/${workspace}/go`
+-      return {
+-        message: `${message} - ${link}`,
+-        action: {
+-          reason: "account_rate_limit",
+-          provider,
+-          title: "Go limit reached",
+-          message,
+-          label: "open settings",
+-          link,
+-        },
+-      }
++    const msg = error.data.message ?? ""
++    const meta = isRecord(error.data.metadata) ? error.data.metadata as Record<string, unknown> : {}
++    const metaCode = typeof meta.code === "string" ? meta.code : ""
++
++    // Auth errors — permanent, credentials won't change on retry
++    if (status === 401 || status === 403 || ProviderClassify.isAuthMessage(msg, status)) return undefined
++    // 5xx server errors — transient, the server may recover quickly
++    if (status !== undefined && status >= 500) return { message: msg }
++    // Free tier limits — permanent without subscription
++    if (error.data.responseBody?.includes("FreeUsageLimitError")) return undefined
++    // Go subscription limits — retry-after can be hours, not worth blocking orchestrator
++    if (error.data.responseBody?.includes("GoUsageLimitError")) return undefined
++    // Generic quota/billing — permanent
++    if (ProviderClassify.isQuotaMessage(msg) && !(status !== undefined && status >= 500)) return undefined
++
++    // Transient network/timeout/decompression errors — retry
++    // Bun/Node SystemError codes (ECONNRESET, ETIMEDOUT, EPIPE, etc.)
++    // and provider-level transient errors (server_error, stream errors)
++    const TRANSIENT_CODES = new Set(["ZlibError", "ProviderHeaderTimeoutError", "ProviderResponseStreamError", "ECONNRESET", "ETIMEDOUT", "EPIPE", "ECONNREFUSED"])
++    if (TRANSIENT_CODES.has(metaCode)) {
++      return { message: msg }
+     }
+-    return { message: error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message }
+-  }
+-
+-  // Check for rate limit patterns in plain text error messages
+-  const msg = isRecord(error.data) ? error.data.message : undefined
+-  if (typeof msg === "string") {
+-    const lower = msg.toLowerCase()
+-    if (
+-      lower.includes("rate increased too quickly") ||
+-      lower.includes("rate limit") ||
+-      lower.includes("too many requests")
+-    ) {
++    // server_error from stream API errors are transient server failures
++    if (error.data.responseBody?.includes("server_error") || error.data.responseBody?.includes("server_is_overloaded")) {
+       return { message: msg }
+     }
+-  }
+-
+-  const json = parseJSON(msg)
+-  if (!json || typeof json !== "object") return undefined
+-  const code = typeof json.code === "string" ? json.code : ""
++    if (msg.includes("Overloaded")) return { message: "Provider is overloaded" }
+ 
+-  if (json.type === "error" && json.error?.type === "too_many_requests") {
+-    return { message: "Too Many Requests" }
+-  }
+-  if (code.includes("exhausted") || code.includes("unavailable")) {
+-    return { message: "Provider is overloaded" }
+-  }
+-  if (json.type === "error" && typeof json.error?.code === "string" && json.error.code.includes("rate_limit")) {
+-    return { message: "Rate Limited" }
++    // All other APIErrors (rate limits, etc.) — non-retryable so orchestrator can act
++    return undefined
+   }
++
++  // Rate limit patterns in plain text are non-retryable
+   return undefined
+ }
+ 
+diff --git a/packages/opencode/src/tool/task.ts b/packages/opencode/src/tool/task.ts
+index 6746ff1e7..6cd4b6a20 100644
+--- a/packages/opencode/src/tool/task.ts
++++ b/packages/opencode/src/tool/task.ts
+@@ -11,9 +11,11 @@ import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
+ import type { SessionPrompt } from "../session/prompt"
+ import { Config } from "@/config/config"
+ import { Provider } from "@/provider/provider"
+-import { Effect, Exit, Schema, Scope } from "effect"
++import { Effect, Exit, Ref, Schema, Scope } from "effect"
+ import { EffectBridge } from "@/effect/bridge"
++import { ProviderClassify } from "@/provider/classify"
+ import { RuntimeFlags } from "@/effect/runtime-flags"
++import { SessionStatus } from "@/session/status"
+ import { Database } from "@opencode-ai/core/database/database"
+ 
+ export interface TaskPromptOps {
+@@ -25,12 +27,16 @@ export interface TaskPromptOps {
+ interface SubagentFailure {
+   status: "failed"
+   error: {
+-    type: "rate_limit" | "api_error" | "auth_error" | "context_overflow" | "content_filter" | "cancelled" | "unknown"
++    type: "rate_limit" | "quota" | "api_error" | "auth_error" | "empty" | "context_overflow" | "content_filter" | "cancelled" | "unknown"
+     provider: string
+     model: string
+     detail: string
+     retryable?: boolean
+     statusCode?: number
++    sessionID?: string
++    attempt?: number
++    next?: number
++    action?: { reason: string; provider: string; title: string; message: string; label: string; link?: string }
+   }
+ }
+ 
+@@ -135,13 +141,37 @@ function classifySubagentFailure(
+     const statusCode = typeof data?.statusCode === "number" ? data.statusCode : undefined
+     const isRetryable = typeof data?.isRetryable === "boolean" ? data.isRetryable : true
+ 
+-    const lowerMessage = message.toLowerCase()
+-    if (
+-      statusCode === 429 ||
+-      lowerMessage.includes("rate limit") ||
+-      lowerMessage.includes("too many requests") ||
+-      lowerMessage.includes("rate increased too quickly")
+-    ) {
++    // Check auth before quota — auth errors are a distinct category
++    if (ProviderClassify.isAuthMessage(message, statusCode)) {
++      return {
++        status: "failed",
++        error: {
++          type: "auth_error",
++          provider,
++          model: mdl,
++          detail: message,
++          statusCode,
++          retryable: isRetryable,
++        },
++      }
++    }
++
++    // Check quota before rate limit — quota is a distinct category
++    if (ProviderClassify.isQuotaMessage(message)) {
++      return {
++        status: "failed",
++        error: {
++          type: "quota",
++          provider,
++          model: mdl,
++          detail: message,
++          statusCode,
++          retryable: isRetryable,
++        },
++      }
++    }
++
++    if (statusCode === 429 || ProviderClassify.isRateLimitMessage(message)) {
+       return {
+         status: "failed",
+         error: {
+@@ -372,7 +402,19 @@ export const TaskTool = Tool.define(
+           return JSON.stringify(classifySubagentFailure(result.info.error, model))
+         }
+ 
+-        return result.parts.findLast((item) => item.type === "text")?.text ?? ""
++        const text = result.parts.findLast((item) => item.type === "text")?.text ?? ""
++        if (text === "") {
++          return JSON.stringify({
++            status: "failed",
++            error: {
++              type: "empty",
++              provider: model.providerID,
++              model: model.modelID,
++              detail: "Subagent produced no output",
++            },
++          })
++        }
++        return text
+       })
+ 
+       const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (
+@@ -476,9 +518,43 @@ export const TaskTool = Tool.define(
+ 
+       const runCancel = yield* EffectBridge.make()
+       const cancel = ops.cancel(nextSession.id)
++      const retryStatusAtAbort = yield* Ref.make<SessionStatus.Info | undefined>(undefined)
+ 
+       function onAbort() {
+-        runCancel.fork(cancel)
++        runCancel.fork(
++          Effect.gen(function* () {
++            const statusSvc = yield* SessionStatus.Service
++            const info = yield* statusSvc.get(nextSession.id)
++            if (info.type === "retry") {
++              const failure = buildRetryFailure(info)
++              yield* Ref.set(retryStatusAtAbort, info)
++              yield* ctx.metadata({ metadata: { ...metadata, subagentFailure: failure } }).pipe(Effect.ignore)
++            }
++            yield* cancel
++          }),
++        )
++      }
++
++      function buildRetryFailure(statusInfo: SessionStatus.Info & { type: "retry" }): SubagentFailure {
++        const msg = statusInfo.message
++        const type: SubagentFailure["error"]["type"] =
++          ProviderClassify.isAuthMessage(msg) ? "auth_error" :
++          ProviderClassify.isQuotaMessage(msg) ? "quota" :
++          ProviderClassify.isRateLimitMessage(msg) ? "rate_limit" :
++          "api_error"
++        return {
++          status: "failed",
++          error: {
++            type,
++            provider: model.providerID,
++            model: model.modelID,
++            detail: msg,
++            sessionID: nextSession.id,
++            attempt: statusInfo.attempt,
++            next: statusInfo.next,
++            action: statusInfo.action,
++          },
++        }
+       }
+ 
+       return yield* Effect.acquireUseRelease(
+@@ -492,8 +568,23 @@ export const TaskTool = Tool.define(
+               background.waitForPromotion(nextSession.id),
+             )
+             if (result?.metadata?.background === true) return backgroundResult()
+-            if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
+-            if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
++
++            const captured = yield* Ref.get(retryStatusAtAbort)
++            if (captured && captured.type === "retry") {
++              const failure = buildRetryFailure(captured)
++              return {
++                title: params.description,
++                metadata: {
++                  ...metadata,
++                  subagentFailure: failure,
++                },
++                output: renderOutput({ sessionID: nextSession.id, state: "error", text: failure.error.detail }),
++              }
++            }
++
++            if (result?.status === "error" || result?.status === "cancelled") {
++              return yield* Effect.fail(new Error(result.status === "cancelled" ? "Task cancelled" : (result.error ?? "Task failed")))
++            }
+ 
+             const output = result?.output ?? ""
+             if (isFailureOutput(output)) {
+@@ -518,8 +609,21 @@ export const TaskTool = Tool.define(
+           }),
+         (_, exit) =>
+           Effect.gen(function* () {
+-            if (Exit.hasInterrupts(exit))
++            if (Exit.hasInterrupts(exit)) {
++              // Fork retry status capture before cancelling child,
++              // so the structured detail is preserved on the part metadata
++              runCancel.fork(
++                Effect.gen(function* () {
++                  const statusSvc = yield* SessionStatus.Service
++                  const info = yield* statusSvc.get(nextSession.id)
++                  if (info.type === "retry") {
++                    const failure = buildRetryFailure(info)
++                    yield* ctx.metadata({ metadata: { ...metadata, subagentFailure: failure } }).pipe(Effect.ignore)
++                  }
++                }),
++              )
+               yield* Effect.all([cancel, background.cancel(nextSession.id)], { discard: true })
++            }
+           }).pipe(
+             Effect.ensuring(
+               Effect.sync(() => {
+diff --git a/packages/opencode/test/session/retry.test.ts b/packages/opencode/test/session/retry.test.ts
+index 30ac879a6..e2448a1ba 100644
+--- a/packages/opencode/test/session/retry.test.ts
++++ b/packages/opencode/test/session/retry.test.ts
+@@ -89,7 +89,13 @@ describe("session.retry.delay", () => {
+   it.instance("policy updates retry status and increments attempts", () =>
+     Effect.gen(function* () {
+       const sessionID = SessionID.make("session-retry-test")
+-      const error = apiError({ "retry-after-ms": "0" })
++      // Use a 503 error which is retryable as a transient server error
++      const error = new SessionV1.APIError({
++        message: "Service temporarily unavailable",
++        isRetryable: false,
++        statusCode: 503,
++        responseHeaders: { "retry-after-ms": "0" },
++      }).toObject()
+       const status = yield* SessionStatus.Service
+ 
+       const step = yield* Schedule.toStepWithMetadata(
+@@ -111,7 +117,7 @@ describe("session.retry.delay", () => {
+       expect(yield* status.get(sessionID)).toMatchObject({
+         type: "retry",
+         attempt: 2,
+-        message: "boom",
++        message: "Service temporarily unavailable",
+       })
+     }),
+   )
+@@ -120,12 +126,12 @@ describe("session.retry.delay", () => {
+ describe("session.retry.retryable", () => {
+   test("maps too_many_requests json messages", () => {
+     const error = wrap(JSON.stringify({ type: "error", error: { type: "too_many_requests" } }))
+-    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Too Many Requests" })
++    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+   })
+ 
+   test("maps overloaded provider codes", () => {
+     const error = wrap(JSON.stringify({ code: "resource_exhausted" }))
+-    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Provider is overloaded" })
++    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+   })
+ 
+   test("does not retry unknown json messages", () => {
+@@ -144,23 +150,23 @@ describe("session.retry.retryable", () => {
+     expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+   })
+ 
+-  test("retries plain text rate limit errors from Alibaba", () => {
++  test("does not retry plain text rate limit errors from Alibaba", () => {
+     const msg =
+       "Upstream error from Alibaba: Request rate increased too quickly. To ensure system stability, please adjust your client logic to scale requests more smoothly over time."
+     const error = wrap(msg)
+-    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: msg })
++    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+   })
+ 
+-  test("retries plain text rate limit errors", () => {
++  test("does not retry plain text rate limit errors", () => {
+     const msg = "Rate limit exceeded, please try again later"
+     const error = wrap(msg)
+-    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: msg })
++    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+   })
+ 
+-  test("retries too many requests in plain text", () => {
++  test("does not retry too many requests in plain text", () => {
+     const msg = "Too many requests, please slow down"
+     const error = wrap(msg)
+-    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: msg })
++    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+   })
+ 
+   test("retries transport timeout errors", () => {
+@@ -254,7 +260,7 @@ describe("session.retry.retryable", () => {
+     expect(retryable).toEqual({ message: "Response decompression failed" })
+   })
+ 
+-  test("maps free limits to Go upsell action", () => {
++  test("free tier limit errors are non-retryable to allow model fallback", () => {
+     const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+       new SessionV1.APIError({
+         message: "Free usage exceeded",
+@@ -267,20 +273,12 @@ describe("session.retry.retryable", () => {
+       }).toObject(),
+     )
+ 
+-    expect(SessionRetry.retryable(error, "opencode")).toEqual({
+-      message: SessionRetry.GO_UPSELL_MESSAGE,
+-      action: {
+-        reason: "free_tier_limit",
+-        provider: "opencode",
+-        title: "Free limit reached",
+-        message: "Subscribe to OpenCode Go for reliable access to the best open-source models, starting at $5/month.",
+-        label: "subscribe",
+-        link: SessionRetry.GO_UPSELL_URL,
+-      },
+-    })
++    // Free tier limit errors must be non-retryable so the orchestrator
++    // receives the failure and can switch to a working model.
++    expect(SessionRetry.retryable(error, "opencode")).toBeUndefined()
+   })
+ 
+-  test("maps Go subscription limits to workspace PAYG upsell", () => {
++  test("Go subscription limits are non-retryable", () => {
+     const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+       new SessionV1.APIError({
+         message: "Subscription quota exceeded. You can continue using free models.",
+@@ -303,22 +301,10 @@ describe("session.retry.retryable", () => {
+       }).toObject(),
+     )
+ 
+-    expect(SessionRetry.retryable(error, "opencode-go")).toEqual({
+-      message:
+-        "5 hour usage limit reached. It will reset in 5 hours 23 minutes. To continue using this model now, enable usage from your available balance - https://opencode.ai/workspace/wrk_01K6XGM22R6FM8JVABE9XDQXGH/go",
+-      action: {
+-        reason: "account_rate_limit",
+-        provider: "opencode-go",
+-        title: "Go limit reached",
+-        message:
+-          "5 hour usage limit reached. It will reset in 5 hours 23 minutes. To continue using this model now, enable usage from your available balance",
+-        label: "open settings",
+-        link: "https://opencode.ai/workspace/wrk_01K6XGM22R6FM8JVABE9XDQXGH/go",
+-      },
+-    })
++    expect(SessionRetry.retryable(error, "opencode-go")).toBeUndefined()
+   })
+ 
+-  test("maps Go subscription limits without limit metadata", () => {
++  test("Go subscription limits without limit metadata are non-retryable", () => {
+     const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+       new SessionV1.APIError({
+         message: "Subscription quota exceeded. You can continue using free models.",
+@@ -340,9 +326,158 @@ describe("session.retry.retryable", () => {
+       }).toObject(),
+     )
+ 
+-    expect(SessionRetry.retryable(error, "opencode-go")?.action?.message).toBe(
+-      "Usage limit reached. It will reset in 15 minutes. To continue using this model now, enable usage from your available balance",
++    expect(SessionRetry.retryable(error, "opencode-go")).toBeUndefined()
++  })
++
++  // --- New regression tests for rate limit / quota / auth classification ---
++
++  test("does not retry TPM rate limit plain text errors", () => {
++    const msg = "Tokens per minute limit exceeded - too many tokens processed."
++    const error = wrap(msg)
++    const result = SessionRetry.retryable(error, retryProvider)
++    expect(result).toBeUndefined()
++  })
++
++  test("does not retry RPM rate limit plain text errors", () => {
++    const msg = "Requests per minute limit reached for this model"
++    const error = wrap(msg)
++    const result = SessionRetry.retryable(error, retryProvider)
++    expect(result).toBeUndefined()
++  })
++
++  test("does not retry too many tokens plain text errors", () => {
++    const msg = "Too many tokens: please reduce the number of tokens and try again"
++    const error = wrap(msg)
++    const result = SessionRetry.retryable(error, retryProvider)
++    expect(result).toBeUndefined()
++  })
++
++  test("does not retry resource exhausted plain text errors", () => {
++    const msg = "Resource exhausted: please retry later"
++    const error = wrap(msg)
++    const result = SessionRetry.retryable(error, retryProvider)
++    expect(result).toBeUndefined()
++  })
++
++  test("does not retry rate-limit hyphenated variant", () => {
++    const msg = "rate-limit exceeded for API calls"
++    const error = wrap(msg)
++    const result = SessionRetry.retryable(error, retryProvider)
++    expect(result).toBeUndefined()
++  })
++
++  test("does not retry ratelimit concatenated variant", () => {
++    const msg = "ratelimit hit: slow down"
++    const error = wrap(msg)
++    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
++  })
++
++  test("does not retry 401 APIError even when isRetryable is true", () => {
++    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
++      new SessionV1.APIError({
++        message: "Invalid API key",
++        isRetryable: true,
++        statusCode: 401,
++      }).toObject(),
++    )
++    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
++  })
++
++  test("does not retry 403 APIError even when isRetryable is true", () => {
++    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
++      new SessionV1.APIError({
++        message: "Forbidden",
++        isRetryable: true,
++        statusCode: 403,
++      }).toObject(),
++    )
++    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
++  })
++
++  test("does not retry auth message APIError even when isRetryable is true", () => {
++    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
++      new SessionV1.APIError({
++        message: "Unauthorized: invalid token",
++        isRetryable: true,
++        statusCode: 400,
++      }).toObject(),
++    )
++    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
++  })
++
++  test("does not confuse context_length_exceeded as rate limit", () => {
++    // This message is a context overflow, not a rate limit — should not match
++    // isRateLimitMessage due to isContextOverflow guard
++    const msg = "context_length_exceeded - too many tokens in context"
++    const error = wrap(msg)
++    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
++  })
++
++  test("does not confuse exceeds context window as rate limit", () => {
++    const msg = "Input exceeds the context window of this model"
++    const error = wrap(msg)
++    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
++  })
++
++  // --- Regression tests for generic quota/billing (non-retryable even with isRetryable: true or 429) ---
++
++  test("does not retry generic quota APIError with isRetryable true and 429", () => {
++    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
++      new SessionV1.APIError({
++        message: "insufficient_quota",
++        isRetryable: true,
++        statusCode: 429,
++      }).toObject(),
++    )
++    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
++  })
++
++  test("does not retry quota exceeded APIError with isRetryable true", () => {
++    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
++      new SessionV1.APIError({
++        message: "Quota exceeded for this model",
++        isRetryable: true,
++        statusCode: 429,
++      }).toObject(),
++    )
++    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
++  })
++
++  test("does not retry billing APIError with isRetryable true", () => {
++    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
++      new SessionV1.APIError({
++        message: "Billing issue on account",
++        isRetryable: true,
++        statusCode: 402,
++      }).toObject(),
++    )
++    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
++  })
++
++  test("still retries 5xx quota-like message preserving 5xx behavior", () => {
++    // Even if the message sounds like quota, a 5xx should still be retried
++    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
++      new SessionV1.APIError({
++        message: "Quota exceeded (internal server issue)",
++        isRetryable: false,
++        statusCode: 500,
++      }).toObject(),
++    )
++    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Quota exceeded (internal server issue)" })
++  })
++
++  test("still retries context overflow errors via APIError with 5xx", () => {
++    // If a provider incorrectly returns context overflow as a 500, it should
++    // still be retried due to the 5xx override — context overflow check is for
++    // the NamedError variant, not status-based
++    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
++      new SessionV1.APIError({
++        message: "context_length_exceeded",
++        isRetryable: false,
++        statusCode: 500,
++      }).toObject(),
+     )
++    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "context_length_exceeded" })
+   })
+ })
+ 
+diff --git a/packages/opencode/test/tool/task.test.ts b/packages/opencode/test/tool/task.test.ts
+index 89b34c76b..ef22c2d60 100644
+--- a/packages/opencode/test/tool/task.test.ts
++++ b/packages/opencode/test/tool/task.test.ts
+@@ -19,6 +19,8 @@ import { SessionStatus } from "@/session/status"
+ import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
+ import { Truncate } from "@/tool/truncate"
+ import { ToolRegistry } from "@/tool/registry"
++import { ProviderClassify } from "@/provider/classify"
++import { isRecord } from "@/util/record"
+ import { RuntimeFlags } from "@/effect/runtime-flags"
+ import { disposeAllInstances } from "../fixture/fixture"
+ import { testEffect } from "../lib/effect"
+@@ -1362,4 +1364,788 @@ describe("tool.task", () => {
+       expect(typeof err?.detail).toBe("string")
+     }),
+   )
++
++  // --- New regression tests for quota, empty output, new rate limit patterns, and false-positive protection ---
++
++  it.instance("subagent APIError with quota message is classified as quota", () =>
++    Effect.gen(function* () {
++      const { chat, assistant } = yield* seed()
++      const tool = yield* TaskTool
++      const def = yield* tool.init()
++
++      const errorObj = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
++        new SessionV1.APIError({
++          message: "Insufficient quota. Check your plan and billing details.",
++          statusCode: 429,
++          isRetryable: false,
++        }).toObject(),
++      )
++
++      const result = yield* def.execute(
++        {
++          description: "quota test",
++          prompt: "do something",
++          subagent_type: "general",
++        },
++        {
++          sessionID: chat.id,
++          messageID: assistant.id,
++          agent: "build",
++          abort: new AbortController().signal,
++          extra: {
++            promptOps: stubOps({ text: "", error: errorObj }),
++          },
++          messages: [],
++          metadata: () => Effect.void,
++          ask: () => Effect.void,
++        },
++      )
++
++      const meta = result.metadata as Record<string, unknown>
++      const failure = meta.subagentFailure as Record<string, unknown> | undefined
++      expect(failure).toBeDefined()
++      expect(failure?.status).toBe("failed")
++      const err = failure?.error as Record<string, unknown> | undefined
++      expect(err?.type).toBe("quota")
++      expect(err?.provider).toBe("test")
++      expect(err?.model).toBe("test-model")
++      expect(err?.detail).toInclude("Insufficient quota")
++    }),
++  )
++
++  it.instance("subagent APIError with quota exceeded message is classified as quota", () =>
++    Effect.gen(function* () {
++      const { chat, assistant } = yield* seed()
++      const tool = yield* TaskTool
++      const def = yield* tool.init()
++
++      const errorObj = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
++        new SessionV1.APIError({
++          message: "Quota exceeded for the current billing period",
++          statusCode: 429,
++          isRetryable: false,
++        }).toObject(),
++      )
++
++      const result = yield* def.execute(
++        {
++          description: "quota exceeded test",
++          prompt: "do something",
++          subagent_type: "general",
++        },
++        {
++          sessionID: chat.id,
++          messageID: assistant.id,
++          agent: "build",
++          abort: new AbortController().signal,
++          extra: {
++            promptOps: stubOps({ text: "", error: errorObj }),
++          },
++          messages: [],
++          metadata: () => Effect.void,
++          ask: () => Effect.void,
++        },
++      )
++
++      const meta = result.metadata as Record<string, unknown>
++      const failure = meta.subagentFailure as Record<string, unknown> | undefined
++      expect(failure).toBeDefined()
++      expect(failure?.status).toBe("failed")
++      const err = failure?.error as Record<string, unknown> | undefined
++      expect(err?.type).toBe("quota")
++    }),
++  )
++
++  it.instance("subagent APIError with TPM rate limit is classified as rate_limit", () =>
++    Effect.gen(function* () {
++      const { chat, assistant } = yield* seed()
++      const tool = yield* TaskTool
++      const def = yield* tool.init()
++
++      const errorObj = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
++        new SessionV1.APIError({
++          message: "Tokens per minute limit exceeded - too many tokens processed.",
++          statusCode: 429,
++          isRetryable: true,
++        }).toObject(),
++      )
++
++      const result = yield* def.execute(
++        {
++          description: "TPM rate limit test",
++          prompt: "do something",
++          subagent_type: "general",
++        },
++        {
++          sessionID: chat.id,
++          messageID: assistant.id,
++          agent: "build",
++          abort: new AbortController().signal,
++          extra: {
++            promptOps: stubOps({ text: "", error: errorObj }),
++          },
++          messages: [],
++          metadata: () => Effect.void,
++          ask: () => Effect.void,
++        },
++      )
++
++      const meta = result.metadata as Record<string, unknown>
++      const failure = meta.subagentFailure as Record<string, unknown> | undefined
++      expect(failure).toBeDefined()
++      expect(failure?.status).toBe("failed")
++      const err = failure?.error as Record<string, unknown> | undefined
++      expect(err?.type).toBe("rate_limit")
++      expect(err?.detail).toInclude("Tokens per minute")
++    }),
++  )
++
++  it.instance("subagent APIError with resource exhausted is classified as rate_limit", () =>
++    Effect.gen(function* () {
++      const { chat, assistant } = yield* seed()
++      const tool = yield* TaskTool
++      const def = yield* tool.init()
++
++      const errorObj = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
++        new SessionV1.APIError({
++          message: "Resource exhausted: rate limit applied",
++          statusCode: 429,
++          isRetryable: true,
++        }).toObject(),
++      )
++
++      const result = yield* def.execute(
++        {
++          description: "resource exhausted test",
++          prompt: "do something",
++          subagent_type: "general",
++        },
++        {
++          sessionID: chat.id,
++          messageID: assistant.id,
++          agent: "build",
++          abort: new AbortController().signal,
++          extra: {
++            promptOps: stubOps({ text: "", error: errorObj }),
++          },
++          messages: [],
++          metadata: () => Effect.void,
++          ask: () => Effect.void,
++        },
++      )
++
++      const meta = result.metadata as Record<string, unknown>
++      const failure = meta.subagentFailure as Record<string, unknown> | undefined
++      expect(failure).toBeDefined()
++      expect(failure?.status).toBe("failed")
++      const err = failure?.error as Record<string, unknown> | undefined
++      expect(err?.type).toBe("rate_limit")
++    }),
++  )
++
++  it.instance("empty subagent output is classified as empty", () =>
++    Effect.gen(function* () {
++      const { chat, assistant } = yield* seed()
++      const tool = yield* TaskTool
++      const def = yield* tool.init()
++
++      // Returning empty text with no error should produce "empty" failure
++      const result = yield* def.execute(
++        {
++          description: "empty output test",
++          prompt: "do something",
++          subagent_type: "general",
++        },
++        {
++          sessionID: chat.id,
++          messageID: assistant.id,
++          agent: "build",
++          abort: new AbortController().signal,
++          extra: {
++            promptOps: stubOps({ text: "" }),
++          },
++          messages: [],
++          metadata: () => Effect.void,
++          ask: () => Effect.void,
++        },
++      )
++
++      const meta = result.metadata as Record<string, unknown>
++      const failure = meta.subagentFailure as Record<string, unknown> | undefined
++      expect(failure).toBeDefined()
++      expect(failure?.status).toBe("failed")
++      const err = failure?.error as Record<string, unknown> | undefined
++      expect(err?.type).toBe("empty")
++      expect(err?.detail).toBe("Subagent produced no output")
++      // output should show error state, not completed
++      expect(result.output).toContain('state="error"')
++      expect(result.output).not.toContain('state="completed"')
++    }),
++  )
++
++  it.instance("context_length_exceeded is not misclassified as rate_limit", () =>
++    Effect.gen(function* () {
++      const { chat, assistant } = yield* seed()
++      const tool = yield* TaskTool
++      const def = yield* tool.init()
++
++      // This message context_length_exceeded could superficially match
++      // "too many tokens" but isContextOverflow guard should block it
++      const errorObj = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
++        new SessionV1.APIError({
++          message: "context_length_exceeded - too many tokens in the request",
++          statusCode: 400,
++          isRetryable: false,
++        }).toObject(),
++      )
++
++      const result = yield* def.execute(
++        {
++          description: "context overflow false positive test",
++          prompt: "do something",
++          subagent_type: "general",
++        },
++        {
++          sessionID: chat.id,
++          messageID: assistant.id,
++          agent: "build",
++          abort: new AbortController().signal,
++          extra: {
++            promptOps: stubOps({ text: "", error: errorObj }),
++          },
++          messages: [],
++          metadata: () => Effect.void,
++          ask: () => Effect.void,
++        },
++      )
++
++      const meta = result.metadata as Record<string, unknown>
++      const failure = meta.subagentFailure as Record<string, unknown> | undefined
++      expect(failure).toBeDefined()
++      const err = failure?.error as Record<string, unknown> | undefined
++      // Should NOT be rate_limit — context overflow should fall through to api_error
++      expect(err?.type).not.toBe("rate_limit")
++      expect(err?.type).toBe("api_error")
++    }),
++  )
++
++  it.instance("subagent APIError with statusCode 401 is classified as auth_error", () =>
++    Effect.gen(function* () {
++      const { chat, assistant } = yield* seed()
++      const tool = yield* TaskTool
++      const def = yield* tool.init()
++
++      const errorObj = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
++        new SessionV1.APIError({
++          message: "invalid API key",
++          statusCode: 401,
++          isRetryable: false,
++        }).toObject(),
++      )
++
++      const result = yield* def.execute(
++        {
++          description: "401 auth test",
++          prompt: "do something",
++          subagent_type: "general",
++        },
++        {
++          sessionID: chat.id,
++          messageID: assistant.id,
++          agent: "build",
++          abort: new AbortController().signal,
++          extra: {
++            promptOps: stubOps({ text: "", error: errorObj }),
++          },
++          messages: [],
++          metadata: () => Effect.void,
++          ask: () => Effect.void,
++        },
++      )
++
++      expect(result.output).toContain('state="error"')
++      const meta = result.metadata as Record<string, unknown>
++      const failure = meta.subagentFailure as Record<string, unknown> | undefined
++      expect(failure).toBeDefined()
++      expect(failure?.status).toBe("failed")
++      const err = failure?.error as Record<string, unknown> | undefined
++      expect(err?.type).toBe("auth_error")
++      expect(err?.statusCode).toBe(401)
++      expect(err?.provider).toBe("test")
++      expect(err?.model).toBe("test-model")
++    }),
++  )
++
++  it.instance("subagent APIError with statusCode 403 is classified as auth_error", () =>
++    Effect.gen(function* () {
++      const { chat, assistant } = yield* seed()
++      const tool = yield* TaskTool
++      const def = yield* tool.init()
++
++      const errorObj = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
++        new SessionV1.APIError({
++          message: "forbidden: access denied",
++          statusCode: 403,
++          isRetryable: false,
++        }).toObject(),
++      )
++
++      const result = yield* def.execute(
++        {
++          description: "403 auth test",
++          prompt: "do something",
++          subagent_type: "general",
++        },
++        {
++          sessionID: chat.id,
++          messageID: assistant.id,
++          agent: "build",
++          abort: new AbortController().signal,
++          extra: {
++            promptOps: stubOps({ text: "", error: errorObj }),
++          },
++          messages: [],
++          metadata: () => Effect.void,
++          ask: () => Effect.void,
++        },
++      )
++
++      expect(result.output).toContain('state="error"')
++      const meta = result.metadata as Record<string, unknown>
++      const failure = meta.subagentFailure as Record<string, unknown> | undefined
++      expect(failure).toBeDefined()
++      expect(failure?.status).toBe("failed")
++      const err = failure?.error as Record<string, unknown> | undefined
++      expect(err?.type).toBe("auth_error")
++      expect(err?.statusCode).toBe(403)
++      expect(err?.provider).toBe("test")
++      expect(err?.model).toBe("test-model")
++    }),
++  )
++
++  it.instance("subagent APIError with auth-like message is classified as auth_error", () =>
++    Effect.gen(function* () {
++      const { chat, assistant } = yield* seed()
++      const tool = yield* TaskTool
++      const def = yield* tool.init()
++
++      // No 401/403 status code but message contains "unauthorized"
++      const errorObj = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
++        new SessionV1.APIError({
++          message: "unauthorized: invalid credentials",
++          statusCode: 400,
++          isRetryable: false,
++        }).toObject(),
++      )
++
++      const result = yield* def.execute(
++        {
++          description: "auth message test",
++          prompt: "do something",
++          subagent_type: "general",
++        },
++        {
++          sessionID: chat.id,
++          messageID: assistant.id,
++          agent: "build",
++          abort: new AbortController().signal,
++          extra: {
++            promptOps: stubOps({ text: "", error: errorObj }),
++          },
++          messages: [],
++          metadata: () => Effect.void,
++          ask: () => Effect.void,
++        },
++      )
++
++      expect(result.output).toContain('state="error"')
++      const meta = result.metadata as Record<string, unknown>
++      const failure = meta.subagentFailure as Record<string, unknown> | undefined
++      expect(failure).toBeDefined()
++      expect(failure?.status).toBe("failed")
++      const err = failure?.error as Record<string, unknown> | undefined
++      expect(err?.type).toBe("auth_error")
++      expect(err?.provider).toBe("test")
++      expect(err?.model).toBe("test-model")
++    }),
++  )
++
++  background.instance("background empty output is detected as failure", () =>
++    Effect.gen(function* () {
++      const jobs = yield* BackgroundJob.Service
++      const { chat, assistant } = yield* seed()
++      const tool = yield* TaskTool
++      const def = yield* tool.init()
++
++      // Return empty text output (no error) — should produce "empty" failure
++      const result = yield* def.execute(
++        {
++          description: "background empty output",
++          prompt: "do something",
++          subagent_type: "general",
++          background: true,
++        },
++        {
++          sessionID: chat.id,
++          messageID: assistant.id,
++          agent: "build",
++          abort: new AbortController().signal,
++          extra: {
++            promptOps: stubOps({ text: "" }),
++          },
++          messages: [],
++          metadata: () => Effect.void,
++          ask: () => Effect.void,
++        },
++      )
++
++      const waited = yield* jobs.wait({ id: result.metadata.sessionId, timeout: 1_000 })
++      expect(waited.timedOut).toBe(false)
++      // The output should be the empty failure JSON, not "completed"
++      const info = waited.info
++      expect(info?.status).toBe("completed") // background job completes (runTask doesn't throw)
++      expect(info?.output).toContain('"status":"failed"')
++      expect(info?.output).toContain('"type":"empty"')
++    }),
++  )
++
++  it.instance("abort during retry exposes retry status as structured failure", () =>
++    Effect.gen(function* () {
++      const statusSvc = yield* SessionStatus.Service
++      const { chat, assistant } = yield* seed()
++      const tool = yield* TaskTool
++      const def = yield* tool.init()
++      const ready = defer<SessionID>()
++      const cancelled = defer<void>()
++      const abort = new AbortController()
++      const promptOps: TaskPromptOps = {
++        cancel: () =>
++          Effect.sync(() => {
++            cancelled.resolve()
++          }),
++        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
++        prompt: (input) =>
++          Effect.promise(() => {
++            ready.resolve(input.sessionID)
++            return cancelled.promise
++          }).pipe(Effect.as(reply(input, "cancelled"))),
++      }
++
++      const fiber = yield* def
++        .execute(
++          {
++            description: "retry abort test",
++            prompt: "do something",
++            subagent_type: "general",
++          },
++          {
++            sessionID: chat.id,
++            messageID: assistant.id,
++            agent: "build",
++            abort: abort.signal,
++            extra: { promptOps },
++            messages: [],
++            metadata: () => Effect.void,
++            ask: () => Effect.void,
++          },
++        )
++        .pipe(Effect.forkChild)
++
++      const childID = yield* Effect.promise(() => ready.promise)
++
++      // Set retry status on the child session to simulate retry-in-progress
++      yield* statusSvc.set(childID, {
++        type: "retry",
++        attempt: 2,
++        message: "Tokens per minute limit exceeded - too many tokens processed.",
++        next: Date.now() + 5000,
++        action: {
++          reason: "account_rate_limit",
++          provider: "test",
++          title: "Rate limit hit",
++          message: "Too many tokens per minute",
++          label: "wait",
++        },
++      })
++
++      abort.abort()
++
++      const result = yield* Fiber.join(fiber)
++      expect(result.output).toContain('state="error"')
++      const meta = result.metadata as Record<string, unknown>
++      const failure = meta.subagentFailure as Record<string, unknown> | undefined
++      expect(failure).toBeDefined()
++      expect(failure?.status).toBe("failed")
++      const err = failure?.error as Record<string, unknown> | undefined
++      expect(err?.type).toBe("rate_limit")
++      expect(err?.detail).toInclude("Tokens per minute")
++      expect(err?.sessionID).toBe(childID)
++      expect(err?.attempt).toBe(2)
++      expect(err?.next).toBeGreaterThan(0)
++      expect(err?.action).toBeDefined()
++      const action = err?.action as Record<string, unknown> | undefined
++      expect(action?.reason).toBe("account_rate_limit")
++    }),
++  )
++
++  it.instance("abort during idle child returns completed result without retry metadata", () =>
++    Effect.gen(function* () {
++      const { chat, assistant } = yield* seed()
++      const tool = yield* TaskTool
++      const def = yield* tool.init()
++      const ready = defer<SessionID>()
++      const cancelled = defer<void>()
++      const abort = new AbortController()
++      const promptOps: TaskPromptOps = {
++        cancel: () =>
++          Effect.sync(() => {
++            cancelled.resolve()
++          }),
++        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
++        prompt: (input) =>
++          Effect.promise(() => {
++            ready.resolve(input.sessionID)
++            return cancelled.promise
++          }).pipe(Effect.as(reply(input, "cancelled"))),
++      }
++
++      const fiber = yield* def
++        .execute(
++          {
++            description: "idle abort test",
++            prompt: "do something",
++            subagent_type: "general",
++          },
++          {
++            sessionID: chat.id,
++            messageID: assistant.id,
++            agent: "build",
++            abort: abort.signal,
++            extra: { promptOps },
++            messages: [],
++            metadata: () => Effect.void,
++            ask: () => Effect.void,
++          },
++        )
++        .pipe(Effect.forkChild)
++
++      yield* Effect.promise(() => ready.promise)
++      // Do NOT set retry status — child stays idle
++      abort.abort()
++
++      const result = yield* Fiber.join(fiber)
++      expect(result.output).toContain('state="completed"')
++      const meta = result.metadata as Record<string, unknown>
++      expect(meta.subagentFailure).toBeUndefined()
++    }),
++  )
++
++  it.instance("abort during retry with non-rate-limit message classifies as api_error", () =>
++    Effect.gen(function* () {
++      const statusSvc = yield* SessionStatus.Service
++      const { chat, assistant } = yield* seed()
++      const tool = yield* TaskTool
++      const def = yield* tool.init()
++      const ready = defer<SessionID>()
++      const cancelled = defer<void>()
++      const abort = new AbortController()
++      const promptOps: TaskPromptOps = {
++        cancel: () =>
++          Effect.sync(() => {
++            cancelled.resolve()
++          }),
++        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
++        prompt: (input) =>
++          Effect.promise(() => {
++            ready.resolve(input.sessionID)
++            return cancelled.promise
++          }).pipe(Effect.as(reply(input, "cancelled"))),
++      }
++
++      const fiber = yield* def
++        .execute(
++          {
++            description: "non-rate retry abort test",
++            prompt: "do something",
++            subagent_type: "general",
++          },
++          {
++            sessionID: chat.id,
++            messageID: assistant.id,
++            agent: "build",
++            abort: abort.signal,
++            extra: { promptOps },
++            messages: [],
++            metadata: () => Effect.void,
++            ask: () => Effect.void,
++          },
++        )
++        .pipe(Effect.forkChild)
++
++      const childID = yield* Effect.promise(() => ready.promise)
++
++      // Set retry status with a message that is NOT rate-limit-related
++      yield* statusSvc.set(childID, {
++        type: "retry",
++        attempt: 3,
++        message: "Service unavailable",
++        next: Date.now() + 10000,
++        action: {
++          reason: "server_error",
++          provider: "test",
++          title: "Server error",
++          message: "Service is temporarily unavailable",
++          label: "wait",
++        },
++      })
++
++      abort.abort()
++
++      const result = yield* Fiber.join(fiber)
++      expect(result.output).toContain('state="error"')
++      const meta = result.metadata as Record<string, unknown>
++      const failure = meta.subagentFailure as Record<string, unknown> | undefined
++      expect(failure).toBeDefined()
++      expect(failure?.status).toBe("failed")
++      const err = failure?.error as Record<string, unknown> | undefined
++      expect(err?.type).not.toBe("rate_limit")
++      expect(err?.type).toBe("api_error")
++      expect(err?.detail).toBe("Service unavailable")
++      expect(err?.attempt).toBe(3)
++      expect(err?.sessionID).toBe(childID)
++    }),
++  )
++
++  it.instance("processor cleanup preserves structured retry detail for running task tools", () =>
++    Effect.gen(function* () {
++      const session = yield* Session.Service
++      const statusSvc = yield* SessionStatus.Service
++
++      // Create parent session with a task tool part
++      const chat = yield* session.create({ title: "cleanup-retry-test" })
++      const userMsg = yield* session.updateMessage({
++        id: MessageID.ascending(),
++        role: "user",
++        sessionID: chat.id,
++        agent: "build",
++        model: ref,
++        time: { created: Date.now() },
++      })
++      const assistantMsg: SessionV1.Assistant = {
++        id: MessageID.ascending(),
++        role: "assistant",
++        parentID: userMsg.id,
++        sessionID: chat.id,
++        mode: "build",
++        agent: "build",
++        cost: 0,
++        path: { cwd: "/tmp", root: "/tmp" },
++        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
++        modelID: ref.modelID,
++        providerID: ref.providerID,
++        variant: "xhigh",
++        time: { created: Date.now() },
++      }
++      yield* session.updateMessage(assistantMsg)
++
++      // Create a child session (simulating what TaskTool would create)
++      const childSession = yield* session.create({ title: "child" })
++
++      // Create a running task tool part with child session metadata
++      const callID = "cleanup-retry-call"
++      yield* session.updatePart({
++        id: PartID.ascending(),
++        messageID: assistantMsg.id,
++        sessionID: chat.id,
++        type: "tool",
++        callID,
++        tool: "task",
++        state: {
++          status: "running",
++          input: { prompt: "do something", description: "test", subagent_type: "general" },
++          metadata: {
++            sessionId: childSession.id,
++            model: { providerID: ref.providerID, modelID: ref.modelID },
++            parentSessionId: chat.id,
++          },
++          time: { start: Date.now() },
++        },
++      } satisfies SessionV1.ToolPart)
++
++      // Set child session to retry status (simulating retry-in-progress)
++      yield* statusSvc.set(childSession.id, {
++        type: "retry",
++        attempt: 2,
++        message: "Tokens per minute limit exceeded - too many tokens processed.",
++        next: Date.now() + 5000,
++        action: {
++          reason: "account_rate_limit",
++          provider: "test",
++          title: "Rate limit hit",
++          message: "Too many tokens per minute",
++          label: "wait",
++        },
++      })
++
++      // Read back the tool part
++      const msgs = yield* session.messages({ sessionID: chat.id })
++      const msg = msgs.find((m) => m.info.role === "assistant")
++      expect(msg).toBeDefined()
++      const toolPart = msg?.parts.find((p): p is SessionV1.ToolPart => p.type === "tool")
++      expect(toolPart).toBeDefined()
++      if (!toolPart) return
++      expect(toolPart.tool).toBe("task")
++
++      // Verify the part has the child session ID in metadata
++      const meta = toolPart.state.status === "running" && "metadata" in toolPart.state
++        ? toolPart.state.metadata
++        : undefined
++      expect(meta).toBeDefined()
++      const childID = isRecord(meta) ? (meta.sessionId as string | undefined) : undefined
++      expect(childID).toBe(childSession.id)
++
++      // Verify child retry status
++      const childStatus = yield* statusSvc.get(childSession.id)
++      expect(childStatus.type).toBe("retry")
++      if (childStatus.type !== "retry") return
++
++      // Classify the retry message
++      const retryMsg = childStatus.message
++      const failureType =
++        ProviderClassify.isAuthMessage(retryMsg) ? "auth_error" :
++        ProviderClassify.isQuotaMessage(retryMsg) ? "quota" :
++        ProviderClassify.isRateLimitMessage(retryMsg) ? "rate_limit" :
++        "api_error"
++      expect(failureType).toBe("rate_limit")
++
++      // Build the structured failure metadata (same logic as processor cleanup)
++      const childModel = isRecord(meta?.model)
++        ? (meta?.model as { providerID?: string; modelID?: string })
++        : undefined
++      const subagentFailure = {
++        status: "failed",
++        error: {
++          type: failureType,
++          provider: childModel?.providerID ?? ref.providerID,
++          model: childModel?.modelID ?? ref.modelID,
++          detail: retryMsg,
++          sessionID: childSession.id,
++          attempt: childStatus.attempt,
++          next: childStatus.next,
++          action: childStatus.action,
++        },
++      }
++
++      // Verify the structured failure has the expected shape
++      expect(subagentFailure.status).toBe("failed")
++      expect(subagentFailure.error.type).toBe("rate_limit")
++      expect(subagentFailure.error.detail).toInclude("Tokens per minute")
++      expect(subagentFailure.error.sessionID).toBe(childSession.id)
++      expect(subagentFailure.error.attempt).toBe(2)
++      expect(subagentFailure.error.action).toBeDefined()
++      expect(subagentFailure.error.action?.reason).toBe("account_rate_limit")
++      expect(subagentFailure.error.provider).toBe(ref.providerID)
++      expect(subagentFailure.error.model).toBe(ref.modelID)
++    }),
++  )
+ })

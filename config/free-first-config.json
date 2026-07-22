@@ -2,7 +2,7 @@
   "$schema": "./free-first-config-schema.json",
   "version": "1.0.0",
   "general": {
-        "free_first": false,
+    "free_first": true,
     "allow_paid_fallback": true,
     "free_model_max_attempts": 3,
     "local_model_max_attempts": 1,
@@ -11,8 +11,8 @@
     "local_model_context_limit": 32768,
     "local_model_output_limit": 4096,
     "local_model_recommended_max_prompt_tokens": 26000,
-        "paid_fallback_max_calls_per_task": 10,
-        "paid_fallback_max_calls_global": 100,
+    "paid_fallback_max_calls_per_task": 3,
+    "paid_fallback_max_calls_global": 10,
     "paid_fallback_requires_approval": false,
     "paid_fallback_allowed_roles": [
       "orchestrator",
@@ -21,7 +21,7 @@
       "test-fixer"
     ],
     "trial_credit_models_enabled": false,
-        "smoke_test_enabled": false,
+    "smoke_test_enabled": true,
     "smoke_test_prompt": "Reply with exactly one word: ok",
     "smoke_test_default_timeout_ms": 30000,
     "default_free_classifications": [

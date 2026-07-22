@@ -1,6 +1,6 @@
 ---
 mode: subagent
-model: opencode-go/deepseek-v4-flash
+model: opencode/north-mini-code-free
 temperature: 0.2
 steps: 80
 description: >

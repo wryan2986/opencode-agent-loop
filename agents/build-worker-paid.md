@@ -1,7 +1,6 @@
 ---
 mode: subagent
 temperature: 0.2
-model: opencode-go/deepseek-v4-flash
 steps: 150
 description: >
   Implements feature scope using paid cloud model (deepseek-v4-flash).
