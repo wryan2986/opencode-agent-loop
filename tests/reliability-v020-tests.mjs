@@ -117,6 +117,7 @@ async function testSameModelRetryBeforeFailover() {
     poolsPath,
     registryPath,
     logDir: dir,
+    maxRetries: 1,
     workerAdapter: async ({ model }) => {
       calls.push(model);
       if (calls.length === 1) return { success: false, code: 'ETIMEDOUT', timedOut: true, exitCode: 1, stdout: '', stderr: 'timeout' };
