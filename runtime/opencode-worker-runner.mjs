@@ -173,16 +173,16 @@ export async function runOpenCodeWorker({
       usageEvents += 1;
       addUsage(usage, extracted.usage);
       reportedCostUsd += extracted.reportedCostUsd;
-      if (onUsage && !budgetExceeded) {
+      if (onUsage) {
         const decision = onUsage({
           modelId: model,
           usage: extracted.usage,
           reportedCostUsd: extracted.reportedCostUsd,
           event
         });
-        if (decision?.exceeded === true || decision?.allowed === false) {
+        if (decision) budgetSnapshot = decision;
+        if (!budgetExceeded && (decision?.exceeded === true || decision?.allowed === false)) {
           budgetExceeded = true;
-          budgetSnapshot = decision;
           if (!child.killed) child.kill('SIGTERM');
         }
       }
