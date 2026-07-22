@@ -42,7 +42,19 @@ jobs:
       - name: Test routing
         run: node tests/routing-tests.mjs
       - name: Test runtime
-        run: node tests/runtime-tests.mjs
+        shell: bash
+        run: |
+          set +e
+          node tests/runtime-tests.mjs 2>&1 | tee runtime-test.log
+          status=${PIPESTATUS[0]}
+          set -e
+          exit "$status"
+      - name: Upload runtime-test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-test-${{ matrix.os }}-node-${{ matrix.node-version }}
+          path: runtime-test.log
       - name: Test plugin integration
         run: node tests/tool-integration-tests.mjs
       - name: Test bypass detection
