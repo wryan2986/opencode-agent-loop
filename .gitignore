@@ -46,7 +46,6 @@ Thumbs.db
 *.local
 
 # OpenCode auto-generated
-package-lock.json
 .opencode/*
 !.opencode/package.json
 !.opencode/plugins/
