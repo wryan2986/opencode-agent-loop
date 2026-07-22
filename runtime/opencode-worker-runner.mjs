@@ -167,6 +167,27 @@ export async function runOpenCodeWorker({
     const TAIL_LINES = 20;
     const TAIL_THROTTLE_MS = 2000;
 
+    function recordUsageEvent(event) {
+      const extracted = extractUsageFromEvent(event);
+      if (!extracted) return;
+      usageEvents += 1;
+      addUsage(usage, extracted.usage);
+      reportedCostUsd += extracted.reportedCostUsd;
+      if (onUsage && !budgetExceeded) {
+        const decision = onUsage({
+          modelId: model,
+          usage: extracted.usage,
+          reportedCostUsd: extracted.reportedCostUsd,
+          event
+        });
+        if (decision?.exceeded === true || decision?.allowed === false) {
+          budgetExceeded = true;
+          budgetSnapshot = decision;
+          if (!child.killed) child.kill('SIGTERM');
+        }
+      }
+    }
+
     function consumeJsonOutput(text, flush = false) {
       jsonLineBuffer += text;
       const lines = jsonLineBuffer.split(/\r?\n/);
@@ -176,38 +197,14 @@ export async function runOpenCodeWorker({
         const trimmed = line.trim();
         if (!trimmed.startsWith('{')) continue;
         try {
-          const event = JSON.parse(trimmed);
-          const extracted = extractUsageFromEvent(event);
-          if (!extracted) continue;
-          usageEvents += 1;
-          addUsage(usage, extracted.usage);
-          reportedCostUsd += extracted.reportedCostUsd;
-          if (onUsage && !budgetExceeded) {
-            const decision = onUsage({
-              modelId: model,
-              usage: extracted.usage,
-              reportedCostUsd: extracted.reportedCostUsd,
-              event
-            });
-            if (decision?.exceeded === true || decision?.allowed === false) {
-              budgetExceeded = true;
-              budgetSnapshot = decision;
-              if (!child.killed) child.kill('SIGTERM');
-            }
-          }
+          recordUsageEvent(JSON.parse(trimmed));
         } catch {
           // Ignore non-JSON output mixed into the stream.
         }
       }
       if (flush && tail.trim().startsWith('{')) {
         try {
-          const event = JSON.parse(tail.trim());
-          const extracted = extractUsageFromEvent(event);
-          if (extracted) {
-            usageEvents += 1;
-            addUsage(usage, extracted.usage);
-            reportedCostUsd += extracted.reportedCostUsd;
-          }
+          recordUsageEvent(JSON.parse(tail.trim()));
         } catch {}
       }
     }
