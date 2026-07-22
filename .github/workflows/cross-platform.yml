@@ -25,7 +25,28 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
-      - run: npm run validate:portable
+      - name: Validate routing policy
+        run: npm run validate:routing
+      - name: Validate budget policy
+        run: npm run validate:budget
+      - name: Validate feature contract
+        run: npm run validate:feature
+      - name: Validate documentation links
+        run: node scripts/check-doc-links.mjs
+      - name: Test v0.2 reliability features
+        run: node tests/reliability-v020-tests.mjs
+      - name: Test budget enforcement
+        run: node tests/budget-tests.mjs
+      - name: Test budget edge cases
+        run: node tests/budget-audit-tests.mjs
+      - name: Test routing
+        run: node tests/routing-tests.mjs
+      - name: Test runtime
+        run: node tests/runtime-tests.mjs
+      - name: Test plugin integration
+        run: node tests/tool-integration-tests.mjs
+      - name: Test bypass detection
+        run: node tests/bypass-detection.mjs
       - name: Test installer in POSIX shell
         shell: bash
         run: |
