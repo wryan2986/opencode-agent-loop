@@ -46,82 +46,41 @@ The agent-loop provides a complete feature lifecycle: plan → approve → test 
 The agent-loop implements a complete feature development lifecycle with six specialized agents working in sequence:
 
 ```
-                                   User request
-                                   │
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Free-First Router                           │
-│                  Model selection and failover                       │
-│                                                                     │
-│  Reads: config/free-first-pools.json                                │
-│  Uses:  config/model-registry.json                                  │
-│  Tries free models first, then falls back to paid models            │
-└──────────────────────────────────┬──────────────────────────────────┘
-                                   │ Selects a model for each role
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                           Orchestrator                              │
-│                       DeepSeek V4 Flash                             │
-│               Plans, delegates, and enforces stages                 │
-└────────────┬────────────┬────────────┬────────────┬─────────────────┘
-             │            │            │            │
-             ▼            ▼            ▼            ▼             ▼
-      ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐
-      │    Test    │ │   Build    │ │   Review   │ │  Escalate  │ │  Recover   │
-      │            │ │            │ │            │ │            │ │            │
-      │ Free Pool  │ │ Free Pool  │ │ Free Pool  │ │ GPT-5.6 L  │ │ Paid DS Fl │
-      └────────────┘ └────────────┘ └────────────┘ └────────────┘ └────────────┘
-
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Model Registry                              │
-│                  config/model-registry.json                         │
-│                                                                     │
-│  79 models across 5 providers                                      │
-│  Capability scores, privacy classifications, and cooldowns          │
-└─────────────────────────────────────────────────────────────────────┘
-```PLANNING
-│ Inspect repository, discover commands, produce plan
-▼
-AWAITING_APPROVAL
-│ User reviews and approves the plan
-▼
-BASELINE_TESTING
-│ Test agent establishes baseline metrics
-▼
-IMPLEMENTING
-│ Build agent implements the requested feature
-▼
-VERIFYING
-│ Test agent verifies implementation quality
-▼
-REVIEWING
-│ Review agent inspects diff and quality gates
-   ├── PASS ──► READY_TO_COMMIT
-   │
-   └── FAIL ──► FIXING (back to IMPLEMENTING, max 2 cycles)
-         │
-         └── 2 failures ──► ESCALATING
-               │
-               ▼
-         (back to BASELINE_TESTING)
-```
-
----
-
-## 🎯 Commands
-
-| Command | Description |
-|---------|-------------|
-| `/feature <description>` | Run the full agent workflow for a new feature |
-| `/loop <description>` | Run the `agent_loop` custom tool through the orchestrator |
-| `/loop-init` | Initialize a repository for agent-loop automation |
-
----
-
-## 📁 Project Structure
-
-```
-opencode-agent-loop/
+                   User request
+                   |
+                   v
++--------------------------------------+
+| Free-First Router                    |
+| Model selection and failover         |
+| Reads free-first-pools.json          |
+| Free models -> paid fallback         |
++--------------------------------------+
+                   |
+                   v
++--------------------------------------+
+| Orchestrator                         |
+| DeepSeek V4 Flash                    |
+| Plans, delegates, enforces stages    |
++--------------------------------------+
+                   |
+                   v
++--------------------------------------+
+| Role Routing                         |
+| Test      -> Free pool               |
+| Build     -> Free pool               |
+| Review    -> Free pool               |
+| Escalate  -> GPT-5.6 Large           |
+| Recover   -> Paid DeepSeek Flash     |
++--------------------------------------+
+                   |
+                   v
++--------------------------------------+
+| Model Registry                       |
+| config/model-registry.json           |
+| 79 models across 5 providers         |
+| Scores, privacy, and cooldowns       |
++--------------------------------------+
+```opencode-agent-loop/
 ├── agents/              # Agent definitions (6 active agents)
 ├── commands/            # Slash commands for OpenCode TUI
 ├── config/              # Model routing configuration
