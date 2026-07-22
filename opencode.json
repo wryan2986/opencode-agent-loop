@@ -11,9 +11,9 @@
     "Free-first cloud routing is configured in config/free-first-config.json.",
     "Model capability registry is at config/model-registry.json.",
     "Role-based model pools are at config/free-first-pools.json.",
-    "The orchestrator manages model failover directly — reads pools from free-first-pools.json, updates cooldown state when providers are rate-limited, and promotes the next available model.",
+    "The orchestrator manages model failover directly \u2014 reads pools from free-first-pools.json, updates cooldown state when providers are rate-limited, and promotes the next available model.",
     "Subagent types: trivial-builder (small changes), build-worker (standard impl), explore (code search), test (verification), review (code review), reconcile (conflict resolution), escalation (GPT-5.6 Luna diagnosis).",
-    "Three builder tiers: trivial-builder (north-mini-code) → build-worker (Mistral Small 4 / DeepSeek Free) → build-worker-paid → escalation.",
+    "Three builder tiers: trivial-builder (north-mini-code) \u2192 build-worker (Mistral Small 4 / DeepSeek Free) \u2192 build-worker-paid \u2192 escalation.",
     "The orchestrator selects the subagent type based on task complexity, not builderTier.",
     "Free-tier quality failures skip local tier and go directly to escalation.",
     "Local Qwythos agents are available: local-qwythos-explore (read-only exploration), local-qwythos-test-fixer (narrow test repair), local-qwythos-review (preliminary review), local-qwythos-private-worker (sensitive/local-only tasks), local-qwythos-builder (small-medium bounded changes).",
@@ -21,8 +21,11 @@
     "Qwythos failure must not trigger paid fallback while suitable free cloud models remain."
   ],
   "default_agent": "orchestrator",
-  "plugin": [".opencode/plugins/agent-loop.js"],
+  "plugin": [
+    ".opencode/plugins/agent-loop.js"
+  ],
   "permission": {
     "webfetch": "allow"
-  }
+  },
+  "small_model": "opencode-go/deepseek-v4-flash"
 }
