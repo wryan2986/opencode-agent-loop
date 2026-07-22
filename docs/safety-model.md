@@ -2,78 +2,93 @@
 
 ## Overview
 
-The OpenCode Agent Loop implements multiple layers of safety controls to prevent accidental damage, data leakage, and unauthorized operations.
+OpenCode Agent Loop combines workflow gates, role separation, command permissions, privacy-aware routing, and validation checks. These controls reduce risk but do not constitute an operating-system sandbox.
 
-## Permission System
+## Permission model
 
-Each agent has a defined permission set in its frontmatter:
+Agent permissions are declared in frontmatter. Shell commands, including Git commands, must be controlled through explicit `bash` patterns.
 
 ```yaml
 permission:
-  edit: deny          # Cannot modify files
-  webfetch: deny      # Cannot make HTTP requests
-  agent_loop: deny     # Cannot start another agent loop
-  task: deny           # Cannot delegate to subagents
-  bash: deny           # Cannot use shell commands
-  git push: deny       # Cannot push to remotes
-  git reset: deny      # Cannot rewrite history
-  git: push: deny
-  reset: deny
+  edit: deny
+  webfetch: deny
+  task: deny
+  bash:
+    "*": deny
+    "git status*": allow
+    "git diff*": allow
+    "git log*": allow
+    "git push*": deny
+    "git reset*": deny
+    "git clean*": deny
 ```
 
-## Default Restrictions
+Do not rely on an undocumented standalone `git:` permission block. The effective restrictions must apply to the shell commands agents can actually execute.
 
-Applied to all agents:
+## Role separation
 
-- **No git push**: Only the orchestrator can create commits; no agent can push
-- **No history rewrite**: Reset, clean, checkout, restore are denied
-- **No agent loop recursion**: Worker processes cannot start new loops
-- **No web fetch**: Most agents cannot make external HTTP requests
-- **Task delegation blocked**: Subagents cannot spawn further subagents
+| Role | Edit | Web | Delegate | Commit | Push |
+|------|------|-----|----------|--------|------|
+| Orchestrator | No | No | Yes | Yes | No |
+| Build worker | Yes | No | No | No | No |
+| Test agent | Test files only | No | No | No | No |
+| Review agent | No | No | No | No | No |
+| Explore agent | No | No | No | No | No |
+| Reconcile agent | Yes | No | No | No | No |
+| Escalation agent | Yes | With explicit policy | No | No | No |
 
-## Role-Based Access
+The builder must never approve its own work. Test and review must independently pass before the orchestrator commits.
 
-| Agent | Edit | Web | Task | Commit | Push | Git Destructive |
-|-------|------|-----|------|--------|------|-----------------|
-| Orchestrator | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
-| Build worker | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Test agent | ✅¹ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Review agent | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Escalation | ✅ | ⚠️² | ❌ | ❌ | ❌ | ❌ |
-| Reconcile | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Explore | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+## Git restrictions
 
-¹ Test files only
-² Requires user permission
+Agents must not run destructive or remote-changing Git commands unless the project explicitly changes the policy and the user approves it. Denied commands include:
 
-## Privacy Safeguards
+- `git push`
+- `git reset`
+- `git clean`
+- `git checkout`
+- `git restore`
+- history rewriting or force operations
 
-- **Task classification**: Tasks are classified as normal, sensitive, local-only, or trusted-provider-only before routing
-- **Model filtering**: Sensitive tasks exclude models with unsuitable data policies
-- **Local-only routing**: Local-only tasks only use models with `privacy_classification: trusted-provider-only`
-- **No credential exposure**: Agents are instructed to never expose credentials, tokens, or secrets
-- **Secret detection**: Staged changes are checked for .env files and credential patterns before commit
+Command rules should use wildcard suffixes so options and arguments cannot bypass exact-string checks.
 
-## Workflow Safeguards
+## Privacy safeguards
 
-- **Stage enforcement**: The orchestrator validates state transitions
-- **Independent review**: Review agent is a separate model with read-only access
-- **Dual verification**: Both test and review must pass before commit
-- **Tiered escalation**: Max 2 fix cycles per tier before escalation
-- **Interruption recovery**: State file allows resuming interrupted runs
+- Tasks are classified as normal, sensitive, local-only, or trusted-provider-only.
+- Sensitive tasks exclude models that disallow sensitive code.
+- Local-only tasks remain on approved local models.
+- Credentials, tokens, private keys, `.env` files, and production data must not be printed or committed.
+- Runtime logs and issue reports must be sanitized before sharing.
+
+Provider policies can change. Registry labels are configuration hints, not legal guarantees. Confirm current provider terms before routing confidential code.
+
+## Workflow safeguards
+
+- explicit plan approval
+- baseline testing before implementation
+- independent verification and review after changes
+- limited fix cycles before escalation
+- state-transition validation
+- checkpointing for interrupted work
+- final staged-diff and secret inspection
+- no automatic push
 
 ## Limitations
 
-- Safety depends on prompt enforcement (not deterministic code)
-- No OS-level sandboxing for shell commands
-- Path confinement relies on tool scoping
-- Model providers have their own data policies
+- Prompt instructions can be misunderstood or ignored by a model.
+- Command-pattern permissions can have gaps if patterns are incomplete.
+- The package does not isolate processes, networks, or filesystems at the OS level.
+- Provider availability and data handling are external dependencies.
+- A patched OpenCode build is currently required for reliable subagent failure reporting.
 
-## Recommended Additional Safeguards
+## Recommended deployment
 
-For production use, consider:
+For meaningful or untrusted work:
 
-- Running in a container or VM
-- Using read-only filesystem mounts
-- Implementing approval gates for destructive operations
-- Regular security audits of agent prompts and configurations
+1. run the target repository in a disposable container or VM
+2. mount only required directories
+3. use least-privilege credentials
+4. keep production secrets outside the workspace
+5. review changes before push or deployment
+6. enable repository branch protection and CI checks
+7. periodically audit agent permissions and routing configuration
