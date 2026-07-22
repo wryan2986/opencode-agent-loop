@@ -38,6 +38,17 @@ export function deriveProviderFromModel(model) {
   return deriveProvider(model);
 }
 
+export function parseExecutableArgs(value = process.env.AGENT_LOOP_WORKER_EXECUTABLE_ARGS) {
+  if (Array.isArray(value)) return value.map(String);
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    throw new Error('AGENT_LOOP_WORKER_EXECUTABLE_ARGS must be a JSON array of strings');
+  }
+}
+
 export function resolveTimeoutMs({ model, timeoutMs, providerTimeouts = {}, latencyTimeoutMapping = {} }) {
   if (timeoutMs != null && timeoutMs > 0) return timeoutMs;
   const timeoutKey = providerTimeoutKey(model);
@@ -99,6 +110,7 @@ export async function runOpenCodeWorker({
   env = {},
   signal,
   executable = process.env.AGENT_LOOP_WORKER_EXECUTABLE || 'opencode',
+  executableArgs,
   sessionId,
   continueSession = false,
   title,
@@ -114,7 +126,9 @@ export async function runOpenCodeWorker({
   if (!prompt) throw new Error('runOpenCodeWorker requires prompt');
 
   const effectiveTimeoutMs = resolveTimeoutMs({ model, timeoutMs, providerTimeouts, latencyTimeoutMapping });
+  const prefixArgs = parseExecutableArgs(executableArgs);
   const args = [
+    ...prefixArgs,
     'run',
     '--agent', agent,
     '--model', model,
