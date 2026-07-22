@@ -39,6 +39,10 @@ if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets)) {
   nonNegativeNumber(budgets.max_input_tokens_per_task, 'budgets.max_input_tokens_per_task', { integer: true, nullable: true });
   nonNegativeNumber(budgets.max_output_tokens_per_task, 'budgets.max_output_tokens_per_task', { integer: true, nullable: true });
   nonNegativeNumber(budgets.max_cost_usd_per_task, 'budgets.max_cost_usd_per_task', { nullable: true });
+  nonNegativeNumber(budgets.max_workflow_calls_per_task, 'budgets.max_workflow_calls_per_task', { integer: true, nullable: true });
+  if (budgets.max_workflow_calls_per_task !== null && budgets.max_workflow_calls_per_task < 1) fail('budgets.max_workflow_calls_per_task must be at least 1');
+  if (typeof budgets.persist_state !== 'boolean') fail('budgets.persist_state must be boolean');
+  if (typeof budgets.state_path !== 'string' || !budgets.state_path) fail('budgets.state_path must be a non-empty string');
   nonNegativeNumber(budgets.ledger_ttl_minutes, 'budgets.ledger_ttl_minutes', { integer: true });
   nonNegativeNumber(budgets.max_tracked_tasks, 'budgets.max_tracked_tasks', { integer: true });
   if (budgets.ledger_ttl_minutes < 1) fail('budgets.ledger_ttl_minutes must be at least 1');
@@ -75,6 +79,11 @@ if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets)) {
     }
   }
 }
+
+if (config.provider_timeouts_ms?.local !== config.general?.local_model_request_timeout_seconds * 1000) {
+  fail('provider_timeouts_ms.local must match general.local_model_request_timeout_seconds');
+}
+if (!config.events || config.events.schema_version !== '1.0.0') fail('events.schema_version must be 1.0.0');
 
 if (!config.retry?.non_retryable_errors?.includes('BUDGET_EXCEEDED')) {
   fail('retry.non_retryable_errors must include BUDGET_EXCEEDED');

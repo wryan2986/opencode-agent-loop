@@ -1,6 +1,6 @@
 {
   "name": "opencode-agent-loop",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "A structured multi-agent feature-development loop for OpenCode with free-first subagent routing and controlled paid fallback.",
   "type": "module",
   "private": true,
@@ -17,12 +17,14 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node tests/budget-tests.mjs && node tests/budget-audit-tests.mjs && node tests/routing-tests.mjs && node tests/runtime-tests.mjs && node tests/tool-integration-tests.mjs && node tests/bypass-detection.mjs",
+    "test": "node tests/reliability-v020-tests.mjs && node tests/budget-tests.mjs && node tests/budget-audit-tests.mjs && node tests/routing-tests.mjs && node tests/runtime-tests.mjs && node tests/tool-integration-tests.mjs && node tests/bypass-detection.mjs",
     "validate:agents": "bash scripts/validate-agent-configs.sh",
     "validate:routing": "node scripts/check-routing-defaults.mjs",
     "validate:budget": "node scripts/check-budget-config.mjs",
     "validate:feature": "node scripts/check-feature-contract.mjs",
-    "validate": "npm run validate:agents && npm run validate:routing && npm run validate:budget && npm run validate:feature && node scripts/check-doc-links.mjs && npm test"
+    "validate": "npm run validate:agents && npm run validate:portable",
+    "events": "node scripts/query-events.mjs",
+    "validate:portable": "npm run validate:routing && npm run validate:budget && npm run validate:feature && node scripts/check-doc-links.mjs && npm test"
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.18.4"

@@ -40,6 +40,7 @@ function concise(result) {
     review: result.review,
     requiresUserInput: result.requiresUserInput === true,
     logPath: result.logPath,
+    eventLogPath: result.eventLogPath || undefined,
     budget: result.budget || undefined,
     steps
   };
@@ -52,10 +53,10 @@ export default async function AgentLoopPlugin() {
         description: 'Run the OpenCode agent-loop runtime for a development task. Use for non-trivial build/test/review work; do not use for simple questions.',
         args: {
           task: tool.schema.string().min(1).describe('The complete user request to run through the agent loop.'),
-          mode: tool.schema.enum(['build', 'test', 'review', 'smoke', 'escalate']).optional().describe('Which role to run: build, test, review, smoke (model test), or escalate (GPT-5.5 diagnosis)'),
+          mode: tool.schema.enum(['build', 'test', 'review', 'smoke', 'escalate']).optional().describe('Which role to run: build, test, review, smoke (model test), or escalate (GPT-5.6 diagnosis)'),
           maxRetries: tool.schema.number().int().min(0).max(5).optional().describe('Maximum task-level retry cycles. Provider failover is handled separately.'),
           models: tool.schema.array(tool.schema.string()).optional().describe('Pre-verified model IDs from a prior smoke call to restrict which models are used.'),
-          taskId: tool.schema.string().min(1).max(128).optional().describe('Stable task ID used to share token and cost budgets across build, test, and review calls.')
+          taskId: tool.schema.string().min(1).max(128).optional().describe('Stable task ID used to share token and cost budgets across smoke, build, test, review, fix, and escalation calls.')
         },
         async execute(args, context) {
           if (process.env.AGENT_LOOP_CHILD === '1') {

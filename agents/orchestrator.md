@@ -3,7 +3,7 @@ mode: primary
 model: opencode-go/deepseek-v4-flash
 temperature: 0.1
 reasoning_effort: medium
-steps: 200
+steps: 100
 description: >
   Orchestrates a complete feature lifecycle. It inspects and plans the work,
   obtains approval, then runs smoke, build, test, review, and escalation stages
