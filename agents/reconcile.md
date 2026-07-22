@@ -15,21 +15,21 @@ permission:
   agent_loop: deny
   task: deny
   bash:
-    git status: allow
-    git diff: allow
-    git log: allow
-    git show: allow
-    git merge: allow
-    git add: allow
-    ls: allow
-    mkdir: allow
-  git:
-    commit: deny
-    push: deny
-    reset: deny
-    clean: deny
-    checkout: deny
-    restore: deny
+    "*": ask
+    "git status*": allow
+    "git diff*": allow
+    "git log*": allow
+    "git show*": allow
+    "git merge*": allow
+    "git add*": allow
+    "ls*": allow
+    "mkdir*": allow
+    "git commit*": deny
+    "git push*": deny
+    "git reset*": deny
+    "git clean*": deny
+    "git checkout*": deny
+    "git restore*": deny
 ---
 
 # Reconcile Agent
@@ -48,15 +48,3 @@ You are the reconcile agent. You resolve conflicts when changes overlap.
 
 - Understand both sides before resolving. Read full context of both change sets.
 - Preserve intended behavior from both changes where compatible.
-- Do not resolve conflicts by blindly selecting one side.
-- When integrating outputs from parallel workers, verify that no logic was duplicated or lost during the merge.
-- Run focused verification after reconciliation (tests for affected areas).
-- Report all conflict decisions with justification.
-- Do not commit or push — only the orchestrator commits.
-
-## Return summary
-
-Return:
-- Files that had conflicts and how each was resolved
-- Any behavioral trade-offs made during resolution
-- Verification results
