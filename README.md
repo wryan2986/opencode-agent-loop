@@ -46,77 +46,45 @@ The agent-loop provides a complete feature lifecycle: plan → approve → test 
 The agent-loop implements a complete feature development lifecycle with six specialized agents working in sequence:
 
 ```
-User request
-│
-▼
-┌──────────────────────────────────────┐
-│ Free-First Router                 │ Reads config/free-first-pools.json
-│ (model selection + failover)       │ Tries free → paid fallback
-└──────────┬───────────────────────────┘
-           │ selects model for each role
-           ▼
-┌──────────────────────────┐
-│ Orchestrator           │ DeepSeek V4 Flash (paid orchestrator)
-│ (primary)              │ Plans, delegates, enforces stages
-└───────┬──────────────────┘
-       │ delegates to
-       ┌┼────┬────┬────┬────┐
-       │ │ │ │ │ │
-       ▼ ▼ ▼ ▼ ▼ ▼
-┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐
-│test│ │bld │ │rev │ │esc │ │rec │
-│Free│ │Free│ │Free│ │GPT5│ │Paid│
-│Pool│ │Pool│ │Pool│ │.5 │ │DS │
-└────┘ └────┘ └────┘ └────┘ └────┘
-   │ │ │ │ 
-   └──┬────┘ │ │
-      │ ┌──────┘ │
-      │ │ ┌─────────┘
-      │ │ │ ┌───────────┘
-      ▼ ▼ ▼ ▼
-┌──────────────────────────────┐
-│ Model Registry             │ 79 models, 5 providers
-│ config/model-registry.json  │ Capability scores, privacy, cooldown
-└──────────────────────────────┘
+     User request
+          │
+          ▼
+┌──────────────────────────────────────────────┐
+│           Free-First Router                   │
+│    (model selection + failover)               │
+│    Reads config/free-first-pools.json         │
+│    Tries free models → paid fallback          │
+└───────────────────────┬───────────────────────┘
+                        │ selects model for each role
+                        ▼
+┌──────────────────────────────────────────────────┐
+│               Orchestrator                        │
+│   (DeepSeek V4 Flash)                            │
+│   Plans, delegates, enforces stages               │
+└────────┬─────────────┬──────────┬───────┬───────┬─┘
+         │             │          │       │       │
+         ▼             ▼          ▼       ▼       ▼
+    ┌────────┐   ┌────────┐  ┌────────┐ ┌────────┐ ┌────────┐
+    │  test  │   │  bld   │  │  rev   │ │  esc   │ │  rec   │
+    │  Free  │   │  Free  │  │  Free  │ │ GPT-5  │ │  Paid  │
+    │  Pool  │   │  Pool  │  │  Pool  │ │ .6 L   │ │  DS Fl │
+    └───┬────┘   └───┬────┘  └───┬────┘ └───┬────┘ └───┬────┘
+        │           │           │         │          │
+        └─────┬─────┘           │         │          │
+              │                 │         │          │
+              └────────┬────────┘         │          │
+                       │                  │          │
+                       └─────────┬────────┘          │
+                                 │                   │
+                                 └──────────┬────────┘
+                                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                    Model Registry                        │
+│   config/model-registry.json                             │
+│   79 models, 5 providers                                 │
+│   Capability scores, privacy classification, cooldowns   │
+└─────────────────────────────────────────────────────────┘
 ```
-
-### Agent Roles
-
-| Agent | Responsibility |
-|-------|---------------|
-| **Orchestrator** | Primary decision-maker that plans tasks and delegates to specialized agents |
-| **Test Agent** | Establishes baseline and verifies implementation quality |
-| **Build Agent** | Implements the requested feature |
-| **Review Agent** | Inspects diffs and enforces quality gates |
-| **Escalation Agent** | Handles complex failures and exceptional cases |
-| **Reconcile Agent** | Final validation before commit |
-
-See [docs/agent-roles.md](docs/agent-roles.md) for detailed role definitions.
-
----
-
-## 🔧 Installation
-
-### Prerequisites
-
-- OpenCode CLI (v1.0+)
-- Node.js (v18+)
-- Git
-
-### Steps
-
-```bash
-# Clone the repository
-# git clone https://github.com/opencode-ai/opencode-agent-loop.git
-# cd opencode-agent-loop
-
-# Run the installer
-bash scripts/install.sh
-
-# Activate for the current shell
-source ~/.bashrc  # or ~/.zshrc
-```
-
 The installer:
 - Adds `OPENCODE_CONFIG_DIR` to your shell configuration
 - Makes agent-loop commands available globally
