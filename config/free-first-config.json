@@ -1,6 +1,6 @@
 {
   "$schema": "./free-first-config-schema.json",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "general": {
     "free_first": true,
     "allow_paid_fallback": true,
@@ -107,7 +107,8 @@
       "SAFETY_REJECTION",
       "BILLING_DISABLED",
       "INVALID_REQUEST",
-      "USER_CANCELLED"
+      "USER_CANCELLED",
+      "BUDGET_EXCEEDED"
     ]
   },
   "model_registry_path": "./config/model-registry.json",
@@ -139,5 +140,20 @@
     "local_trivial_max_lines": 20,
     "routine_fallback_on_uncertain": true
   },
-  "lightweight_profiles": {}
+  "lightweight_profiles": {},
+  "budgets": {
+    "enabled": true,
+    "max_tokens_per_task": 250000,
+    "max_input_tokens_per_task": 200000,
+    "max_output_tokens_per_task": 50000,
+    "max_cost_usd_per_task": 1,
+    "fail_closed_on_unknown_pricing": false,
+    "unknown_paid_model_pricing": {
+      "input_per_million_usd": 5,
+      "output_per_million_usd": 15,
+      "reasoning_per_million_usd": 15,
+      "cache_read_per_million_usd": 1,
+      "cache_write_per_million_usd": 5
+    }
+  }
 }

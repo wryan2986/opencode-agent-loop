@@ -14,6 +14,7 @@ Controls global behavior such as:
 - smoke-test behavior
 - privacy classifications
 - paid-call limits
+- per-task token and cost budgets
 
 Treat this file as policy. Do not store provider keys or other credentials in it.
 
@@ -51,6 +52,21 @@ The intended default strategy is:
 - GPT-5.6 Luna for explicit escalation and difficult diagnosis
 
 This distinction matters: the orchestrator is not free-first, while delegated roles generally are.
+
+## Task budgets
+
+The `budgets` section in `config/free-first-config.json` enforces a shared limit for a task ID across smoke, build, test, review, and failover attempts.
+
+Default limits are:
+
+- 250,000 total tokens
+- 200,000 input tokens
+- 50,000 output plus reasoning tokens
+- $1.00 estimated or provider-reported cost
+
+OpenCode `step_finish` events provide input, output, reasoning, cache-read, cache-write, and provider-reported cost data. The runtime tracks those values by task step and model. Cost estimation uses structured `pricing` fields in `config/model-registry.json`; legacy price text is supported for compatibility. Unknown paid-model prices use the conservative fallback rates in `unknown_paid_model_pricing` unless `fail_closed_on_unknown_pricing` is enabled.
+
+When any limit is crossed, the active worker is terminated, failover stops, and the structured result returns `code: "BUDGET_EXCEEDED"` with the complete budget snapshot. Reuse the same optional `taskId` in sequential `agent_loop` calls to share one budget across stages.
 
 ## Provider cooldowns
 

@@ -6,10 +6,12 @@ import { PaidFallbackController } from '../lib/paid-fallback.mjs';
 import { loadPoolConfig, normalizePoolConfig, isModelCoolingDown } from '../lib/pool-normalizer.mjs';
 import { runOpenCodeWorker, resolveTimeoutMs } from './opencode-worker-runner.mjs';
 import { reapExpiredCooldowns } from '../lib/cooldown-manager.mjs';
+import { BudgetTracker } from '../lib/budget-manager.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, '..');
 const DEFAULT_LOG_DIR = resolve(PACKAGE_ROOT, '.opencode', 'agent-loop-logs');
+const DEFAULT_REGISTRY_PATH = resolve(PACKAGE_ROOT, 'config/model-registry.json');
 
 function loadFreeFirstConfig(configPath) {
   try {
@@ -86,9 +88,12 @@ export async function executeAgentTask({
   workerAdapter = runOpenCodeWorker,
   configPath = resolve(PACKAGE_ROOT, 'config/free-first-config.json'),
   poolsPath = resolve(PACKAGE_ROOT, 'config/free-first-pools.json'),
+  registryPath = DEFAULT_REGISTRY_PATH,
   logDir = DEFAULT_LOG_DIR,
   forceModels,
-  progressCallback
+  progressCallback,
+  budgetTaskId = taskId,
+  budgetStep = role
 }) {
   if (!role) throw new Error('executeAgentTask requires role');
   if (!agent) throw new Error('executeAgentTask requires agent');
@@ -127,6 +132,12 @@ export async function executeAgentTask({
 
   const freeFirstConfig = loadFreeFirstConfig(configPath);
   const { providerTimeouts, latencyTimeoutMapping } = extractProviderTimeoutConfig(freeFirstConfig);
+  const budgetTracker = BudgetTracker.fromFiles({
+    taskId: budgetTaskId,
+    step: budgetStep,
+    configPath,
+    registryPath
+  });
 
   const failover = new FailoverHandler(configPath, poolsPath);
   await failover.loadConfig();
@@ -144,6 +155,12 @@ export async function executeAgentTask({
     paidFallback,
     paidApproved: metadata.paidApproved === true || process.env.AGENT_LOOP_PAID_APPROVED === '1',
     log: event => writeAttemptLog(logPath, event),
+    canAttempt: async () => {
+      const budget = budgetTracker.snapshot();
+      return budgetTracker.canContinue()
+        ? { allowed: true, budget }
+        : { allowed: false, code: 'BUDGET_EXCEEDED', reason: budget.exceededReasons.join('; '), budget };
+    },
     invoke: async ({ modelId, tier, attemptIndex, attempts }) => {
       const checkpoint = attempts.length > 0
         ? `\n\nPrevious provider attempts failed. Before editing, inspect repository state and git diff. Attempted models: ${attempts.map(a => a.modelId).join(', ')}.`
@@ -163,6 +180,7 @@ export async function executeAgentTask({
           progressCallback({ title: modelLabel, metadata: { model: modelId, tail, action: 'progress', attempt: attemptIndex + 1 } });
         }
       };
+      let usageRecordedIncrementally = false;
       const invocation = await workerAdapter({
         cwd,
         agent,
@@ -182,13 +200,40 @@ export async function executeAgentTask({
         progressLogPath,
         providerTimeouts,
         latencyTimeoutMapping,
-        stdoutTailCallback
+        stdoutTailCallback,
+        onUsage: ({ usage, reportedCostUsd }) => {
+          usageRecordedIncrementally = true;
+          const budget = budgetTracker.recordUsage({ modelId, usage, reportedCostUsd, step: budgetStep });
+          writeAttemptLog(logPath, { type: 'budget-usage', taskId: budgetTaskId, step: budgetStep, modelId, usage, budget });
+          if (progressCallback) {
+            progressCallback({ title: `Budget: ${budget.used.total} tokens / ${budget.used.billableCostUsd.toFixed(4)}`, metadata: { action: 'budget', budget } });
+          }
+          return budget;
+        }
       });
+      if (!usageRecordedIncrementally && invocation?.usage) {
+        invocation.budget = budgetTracker.recordUsage({
+          modelId,
+          usage: invocation.usage,
+          reportedCostUsd: invocation.reportedCostUsd,
+          step: budgetStep
+        });
+      }
+      const budget = budgetTracker.snapshot();
+      if (budget.exceeded) {
+        invocation.success = false;
+        invocation.code = 'BUDGET_EXCEEDED';
+        invocation.budgetExceeded = true;
+        invocation.budget = budget;
+      }
       writeFileSync(attemptLog, [
         `model=${modelId}`,
         `tier=${tier}`,
         `timeoutMs=${effectiveTimeoutMs}`,
         `exitCode=${invocation.exitCode ?? ''}`,
+        `usage=${JSON.stringify(invocation.usage || {})}`,
+        `reportedCostUsd=${invocation.reportedCostUsd || 0}`,
+        `budgetExceeded=${invocation.budgetExceeded === true}`,
         '--- stdout ---',
         redact(invocation.stdout),
         '--- stderr ---',
@@ -206,6 +251,10 @@ export async function executeAgentTask({
         exitCode: invocation.exitCode,
         success: !!invocation.success,
         code: invocation.code || null,
+        usage: invocation.usage || null,
+        reportedCostUsd: invocation.reportedCostUsd || 0,
+        budgetExceeded: invocation.budgetExceeded === true,
+        budget: invocation.budget || budgetTracker.snapshot(),
         logPath: attemptLog,
         progressLogPath
       };
@@ -230,6 +279,7 @@ export async function executeAgentTask({
     stepStartedAt,
     attemptDetails,
     attemptedModels: result.attemptedModels || result.attempts?.map(a => a.modelId) || [],
-    successfulModel: result.successfulModel || null
+    successfulModel: result.successfulModel || null,
+    budget: budgetTracker.snapshot()
   };
 }

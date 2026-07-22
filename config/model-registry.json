@@ -179,6 +179,14 @@
           "paid-fallback-builder",
           "escalation"
         ]
+      },
+      "pricing": {
+        "input_per_million_usd": 0.14,
+        "output_per_million_usd": 0.28,
+        "reasoning_per_million_usd": 0.28,
+        "cache_read_per_million_usd": 0.14,
+        "cache_write_per_million_usd": 0.14,
+        "source": "registry-notes"
       }
     },
     {
@@ -205,7 +213,15 @@
       "paid_fallback_allowed": false,
       "paid_equivalent": null,
       "trial_credit": false,
-      "notes": "$1.74/$3.48 per 1M tokens. Zero-retention. Trusted provider only."
+      "notes": "$1.74/$3.48 per 1M tokens. Zero-retention. Trusted provider only.",
+      "pricing": {
+        "input_per_million_usd": 1.74,
+        "output_per_million_usd": 3.48,
+        "reasoning_per_million_usd": 3.48,
+        "cache_read_per_million_usd": 1.74,
+        "cache_write_per_million_usd": 1.74,
+        "source": "registry-notes"
+      }
     },
     {
       "provider": "opencode",
@@ -231,7 +247,15 @@
       "paid_fallback_allowed": false,
       "paid_equivalent": null,
       "trial_credit": false,
-      "notes": "Pricing unknown. Zero-retention. Trusted provider only."
+      "notes": "Pricing unknown. Zero-retention. Trusted provider only.",
+      "pricing": {
+        "input_per_million_usd": null,
+        "output_per_million_usd": null,
+        "reasoning_per_million_usd": null,
+        "cache_read_per_million_usd": null,
+        "cache_write_per_million_usd": null,
+        "source": "unknown"
+      }
     },
     {
       "provider": "opencode",
@@ -257,7 +281,15 @@
       "paid_fallback_allowed": false,
       "paid_equivalent": null,
       "trial_credit": false,
-      "notes": "Pricing unknown. Zero-retention. Trusted provider only."
+      "notes": "Pricing unknown. Zero-retention. Trusted provider only.",
+      "pricing": {
+        "input_per_million_usd": null,
+        "output_per_million_usd": null,
+        "reasoning_per_million_usd": null,
+        "cache_read_per_million_usd": null,
+        "cache_write_per_million_usd": null,
+        "source": "unknown"
+      }
     },
     {
       "provider": "opencode",
@@ -283,7 +315,15 @@
       "paid_fallback_allowed": false,
       "paid_equivalent": null,
       "trial_credit": false,
-      "notes": "$1.40/$4.40 per 1M tokens. Zero-retention. Trusted provider only."
+      "notes": "$1.40/$4.40 per 1M tokens. Zero-retention. Trusted provider only.",
+      "pricing": {
+        "input_per_million_usd": 1.4,
+        "output_per_million_usd": 4.4,
+        "reasoning_per_million_usd": 4.4,
+        "cache_read_per_million_usd": 1.4,
+        "cache_write_per_million_usd": 1.4,
+        "source": "registry-notes"
+      }
     },
     {
       "provider": "opencode",
@@ -309,7 +349,15 @@
       "paid_fallback_allowed": false,
       "paid_equivalent": null,
       "trial_credit": false,
-      "notes": "$1.40/$4.40 per 1M tokens. Zero-retention. Trusted provider only."
+      "notes": "$1.40/$4.40 per 1M tokens. Zero-retention. Trusted provider only.",
+      "pricing": {
+        "input_per_million_usd": 1.4,
+        "output_per_million_usd": 4.4,
+        "reasoning_per_million_usd": 4.4,
+        "cache_read_per_million_usd": 1.4,
+        "cache_write_per_million_usd": 1.4,
+        "source": "registry-notes"
+      }
     },
     {
       "provider": "opencode",
@@ -335,7 +383,15 @@
       "paid_fallback_allowed": false,
       "paid_equivalent": null,
       "trial_credit": false,
-      "notes": "$0.95/$4.00 per 1M tokens. Zero-retention. Trusted provider only."
+      "notes": "$0.95/$4.00 per 1M tokens. Zero-retention. Trusted provider only.",
+      "pricing": {
+        "input_per_million_usd": 0.95,
+        "output_per_million_usd": 4,
+        "reasoning_per_million_usd": 4,
+        "cache_read_per_million_usd": 0.95,
+        "cache_write_per_million_usd": 0.95,
+        "source": "registry-notes"
+      }
     },
     {
       "provider": "opencode",
@@ -361,7 +417,15 @@
       "paid_fallback_allowed": false,
       "paid_equivalent": null,
       "trial_credit": false,
-      "notes": "$0.95/$4.00 per 1M tokens. Zero-retention. Trusted provider only. Specialized for code."
+      "notes": "$0.95/$4.00 per 1M tokens. Zero-retention. Trusted provider only. Specialized for code.",
+      "pricing": {
+        "input_per_million_usd": 0.95,
+        "output_per_million_usd": 4,
+        "reasoning_per_million_usd": 4,
+        "cache_read_per_million_usd": 0.95,
+        "cache_write_per_million_usd": 0.95,
+        "source": "registry-notes"
+      }
     },
     {
       "provider": "opencode",
@@ -387,7 +451,15 @@
       "paid_fallback_allowed": false,
       "paid_equivalent": null,
       "trial_credit": false,
-      "notes": "$0.30/$1.20 per 1M tokens. Zero-retention. Trusted provider only."
+      "notes": "$0.30/$1.20 per 1M tokens. Zero-retention. Trusted provider only.",
+      "pricing": {
+        "input_per_million_usd": 0.3,
+        "output_per_million_usd": 1.2,
+        "reasoning_per_million_usd": 1.2,
+        "cache_read_per_million_usd": 0.3,
+        "cache_write_per_million_usd": 0.3,
+        "source": "registry-notes"
+      }
     },
     {
       "provider": "opencode",
@@ -413,7 +485,15 @@
       "paid_fallback_allowed": false,
       "paid_equivalent": null,
       "trial_credit": false,
-      "notes": "$0.30/$1.20 per 1M tokens. Zero-retention. Trusted provider only."
+      "notes": "$0.30/$1.20 per 1M tokens. Zero-retention. Trusted provider only.",
+      "pricing": {
+        "input_per_million_usd": 0.3,
+        "output_per_million_usd": 1.2,
+        "reasoning_per_million_usd": 1.2,
+        "cache_read_per_million_usd": 0.3,
+        "cache_write_per_million_usd": 0.3,
+        "source": "registry-notes"
+      }
     },
     {
       "provider": "opencode",
@@ -439,7 +519,15 @@
       "paid_fallback_allowed": false,
       "paid_equivalent": null,
       "trial_credit": false,
-      "notes": "$0.50/$3.00 per 1M tokens. Zero-retention. Trusted provider only."
+      "notes": "$0.50/$3.00 per 1M tokens. Zero-retention. Trusted provider only.",
+      "pricing": {
+        "input_per_million_usd": 0.5,
+        "output_per_million_usd": 3,
+        "reasoning_per_million_usd": 3,
+        "cache_read_per_million_usd": 0.5,
+        "cache_write_per_million_usd": 0.5,
+        "source": "registry-notes"
+      }
     },
     {
       "provider": "opencode",
@@ -465,7 +553,15 @@
       "paid_fallback_allowed": false,
       "paid_equivalent": null,
       "trial_credit": false,
-      "notes": "$0.40/$1.60 per 1M tokens. Zero-retention. Trusted provider only."
+      "notes": "$0.40/$1.60 per 1M tokens. Zero-retention. Trusted provider only.",
+      "pricing": {
+        "input_per_million_usd": 0.4,
+        "output_per_million_usd": 1.6,
+        "reasoning_per_million_usd": 1.6,
+        "cache_read_per_million_usd": 0.4,
+        "cache_write_per_million_usd": 0.4,
+        "source": "registry-notes"
+      }
     },
     {
       "provider": "opencode",
@@ -491,7 +587,15 @@
       "paid_fallback_allowed": false,
       "paid_equivalent": null,
       "trial_credit": false,
-      "notes": "$2.50/$7.50 per 1M tokens. Zero-retention. Trusted provider only. Premium flagship model."
+      "notes": "$2.50/$7.50 per 1M tokens. Zero-retention. Trusted provider only. Premium flagship model.",
+      "pricing": {
+        "input_per_million_usd": 2.5,
+        "output_per_million_usd": 7.5,
+        "reasoning_per_million_usd": 7.5,
+        "cache_read_per_million_usd": 2.5,
+        "cache_write_per_million_usd": 2.5,
+        "source": "registry-notes"
+      }
     },
     {
       "provider": "cerebras",
@@ -1485,7 +1589,15 @@
       "paid_fallback_allowed": false,
       "paid_equivalent": null,
       "trial_credit": false,
-      "notes": "$0.14/$0.28 per 1M tokens. 1M context. Paid tier on NVIDIA."
+      "notes": "$0.14/$0.28 per 1M tokens. 1M context. Paid tier on NVIDIA.",
+      "pricing": {
+        "input_per_million_usd": 0.14,
+        "output_per_million_usd": 0.28,
+        "reasoning_per_million_usd": 0.28,
+        "cache_read_per_million_usd": 0.14,
+        "cache_write_per_million_usd": 0.14,
+        "source": "registry-notes"
+      }
     },
     {
       "provider": "nvidia",
@@ -1511,7 +1623,15 @@
       "paid_fallback_allowed": false,
       "paid_equivalent": null,
       "trial_credit": false,
-      "notes": "$0.435/$0.87 per 1M tokens. 1M context. Paid tier on NVIDIA. Top coding score."
+      "notes": "$0.435/$0.87 per 1M tokens. 1M context. Paid tier on NVIDIA. Top coding score.",
+      "pricing": {
+        "input_per_million_usd": 0.435,
+        "output_per_million_usd": 0.87,
+        "reasoning_per_million_usd": 0.87,
+        "cache_read_per_million_usd": 0.435,
+        "cache_write_per_million_usd": 0.435,
+        "source": "registry-notes"
+      }
     },
     {
       "provider": "nvidia",
@@ -1537,7 +1657,15 @@
       "paid_fallback_allowed": false,
       "paid_equivalent": null,
       "trial_credit": false,
-      "notes": "$0.20/$0.80 per 1M tokens. 262K context. Paid tier on NVIDIA."
+      "notes": "$0.20/$0.80 per 1M tokens. 262K context. Paid tier on NVIDIA.",
+      "pricing": {
+        "input_per_million_usd": 0.2,
+        "output_per_million_usd": 0.8,
+        "reasoning_per_million_usd": 0.8,
+        "cache_read_per_million_usd": 0.2,
+        "cache_write_per_million_usd": 0.2,
+        "source": "registry-notes"
+      }
     },
     {
       "provider": "nvidia",
@@ -1563,7 +1691,15 @@
       "paid_fallback_allowed": false,
       "paid_equivalent": null,
       "trial_credit": false,
-      "notes": "$0.50/$2.50 per 1M tokens. 1M context. Paid tier on NVIDIA. Flagship model."
+      "notes": "$0.50/$2.50 per 1M tokens. 1M context. Paid tier on NVIDIA. Flagship model.",
+      "pricing": {
+        "input_per_million_usd": 0.5,
+        "output_per_million_usd": 2.5,
+        "reasoning_per_million_usd": 2.5,
+        "cache_read_per_million_usd": 0.5,
+        "cache_write_per_million_usd": 0.5,
+        "source": "registry-notes"
+      }
     },
     {
       "provider": "openrouter",
@@ -2208,6 +2344,14 @@
           "local inference server unreachable",
           "requires GPU audit"
         ]
+      },
+      "pricing": {
+        "input_per_million_usd": null,
+        "output_per_million_usd": null,
+        "reasoning_per_million_usd": null,
+        "cache_read_per_million_usd": null,
+        "cache_write_per_million_usd": null,
+        "source": "unknown"
       }
     }
   ]

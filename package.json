@@ -17,7 +17,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node tests/routing-tests.mjs && node tests/runtime-tests.mjs && node tests/tool-integration-tests.mjs && node tests/bypass-detection.mjs",
+    "test": "node tests/budget-tests.mjs && node tests/routing-tests.mjs && node tests/runtime-tests.mjs && node tests/tool-integration-tests.mjs && node tests/bypass-detection.mjs",
     "validate:agents": "bash scripts/validate-agent-configs.sh",
     "validate:routing": "node scripts/check-routing-defaults.mjs",
     "validate": "npm run validate:agents && npm run validate:routing && node scripts/check-doc-links.mjs && npm test"
