@@ -2,18 +2,41 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-22
+
 ### Added
 
-- Added configurable per-task token and cost budgets with live OpenCode usage tracking, model-registry pricing estimates, failover interruption, and structured budget output. Closes #4.
-- Added the referenced free-first configuration schema and automated budget/feature contract validation.
-- Added bounded in-memory budget-ledger retention with configurable TTL and task-count limits.
+- Added configurable token, cost, and workflow-call budgets shared by one stable task ID.
+- Added atomic budget persistence across OpenCode and plugin restarts with TTL and task-count retention limits.
+- Added same-model transient retries with exponential backoff and jitter before provider failover.
+- Added provider adapters for provider identity, aliases, timeout selection, local-model recognition, and error normalization.
+- Added a custom provider-adapter example and extension documentation.
+- Added a versioned structured event schema, append-only JSONL event stream, recursive redaction, and query utility. Closes #5.
+- Added Linux, macOS, Windows, WSL, and Git Bash guidance plus a cross-platform Node CI matrix. Closes #6.
+- Added scheduled and manually configurable patched-OpenCode compatibility builds.
+- Added portable task-checkpoint paths.
+- Added a workflow-call ceiling and reduced parent-orchestrator turn cap.
+- Added v0.2 configuration, event, feature-contract, and reliability validation.
+
+### Changed
+
+- Routed every `/feature` worker stage through the budget-enforced `agent_loop` tool.
+- Moved provider-specific runtime behavior behind the provider-adapter interface. Closes #7.
+- Updated runtime state layout under `.opencode/agent-loop-state/`.
+- Updated package and policy schema versions to 0.2.0 and 2.0.0 respectively.
+- Updated architecture, configuration, platform, troubleshooting, event, and provider documentation.
 
 ### Fixed
 
-- Treat local-unmetered models as zero-cost and account for a final usage event even when the JSON stream has no trailing newline.
-- Route `/feature` delegation through the budget-enforced `agent_loop` tool and require one stable task ID across all stages.
-- Continue recording usage emitted during worker shutdown after a budget-triggered termination.
-- Mark budget totals explicitly as delegated-worker scope so parent-orchestrator usage is not misrepresented.
+- Made the public `maxRetries` option perform actual same-model retries for transient failures.
+- Corrected timeout selection for local/Ollama model IDs without a slash.
+- Removed the hardcoded `/usr/local/bin/opencode` executable path so PATH resolution works across operating systems.
+- Treat local-unmetered models as zero-cost.
+- Account for final usage events emitted without a trailing newline or during budget-triggered shutdown.
+- Stop retries, failover, and escalation immediately after `BUDGET_EXCEEDED`.
+- Prevent replacement task IDs from being used to evade an exhausted feature budget.
+- Strengthened recursive redaction for structured event and attempt logs.
+- Clarified that exact parent-orchestrator token and dollar usage is unavailable, while parent workflow calls and turns are bounded.
 
 ## [0.1.1] - 2026-07-22
 
