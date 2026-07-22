@@ -20,7 +20,7 @@
 - OpenCode TUI integration via agent_loop custom tool
 - Installation and validation scripts
 - Free-first configuration with ordered model pools
-- Local Qwythos 9B model support for sensitive tasks
+- Local Ollama 9B model support for sensitive tasks
 - Privacy-classification-based model filtering
 - Recursion guard to prevent agent loop cycles
 - Paid fallback with per-task and global limits

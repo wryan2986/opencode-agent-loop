@@ -99,11 +99,11 @@ done
 
 echo ""
 
-# ─── 3. Disabled Qwythos Agents ─────────────────────────────────────────────
+# ─── 3. Disabled Ollama Agents ─────────────────────────────────────────────
 
-echo "[3] Disabled Qwythos agents (disabled, not enabled)"
+echo "[3] Disabled Ollama agents (disabled, not enabled)"
 
-for agent_file in local-qwythos-explore.md local-qwythos-test-fixer.md local-qwythos-review.md; do
+for agent_file in local-ollama-explore.md local-ollama-test-fixer.md local-ollama-review.md; do
   check "agents/$agent_file exists" test -f "$PROJECT_ROOT/agents/$agent_file"
   # Check that enabled: false is in the frontmatter (disabled, not active)
   if grep -q "^enabled: false" "$PROJECT_ROOT/agents/$agent_file" 2>/dev/null; then
@@ -112,11 +112,11 @@ for agent_file in local-qwythos-explore.md local-qwythos-test-fixer.md local-qwy
     echo "  ❌ FAIL: agents/$agent_file does not have enabled: false"
     ERRORS=$((ERRORS + 1))
   fi
-  # Check that model is qwythos-9b-local
-  if grep -q "^model: qwythos-9b-local" "$PROJECT_ROOT/agents/$agent_file" 2>/dev/null; then
-    echo "  ✅ PASS: agents/$agent_file references qwythos-9b-local model"
+  # Check that model is ollama-9b-local
+  if grep -q "^model: ollama-9b-local" "$PROJECT_ROOT/agents/$agent_file" 2>/dev/null; then
+    echo "  ✅ PASS: agents/$agent_file references ollama-9b-local model"
   else
-    echo "  ❌ FAIL: agents/$agent_file does not reference qwythos-9b-local"
+    echo "  ❌ FAIL: agents/$agent_file does not reference ollama-9b-local"
     ERRORS=$((ERRORS + 1))
   fi
 done

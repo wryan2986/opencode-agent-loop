@@ -128,7 +128,7 @@ async function main() {
     'nvidia/mistralai/mistral-small-4-119b-2603',
     'opencode/north-mini-code-free',
     'groq/meta-llama/llama-4-scout-17b-16e-instruct',
-    'qwythos-9b-local',
+    'ollama-9b-local',
     'opencode-go/deepseek-v4-flash'
   ];
 

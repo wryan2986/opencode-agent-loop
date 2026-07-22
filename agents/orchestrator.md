@@ -27,11 +27,11 @@ permission:
     build-worker: allow
     build-worker-local: allow
     trivial-builder: allow
-    local-qwythos-explore: allow
-    local-qwythos-test-fixer: allow
-    local-qwythos-review: allow
-    local-qwythos-private-worker: allow
-    local-qwythos-builder: allow
+    local-ollama-explore: allow
+    local-ollama-test-fixer: allow
+    local-ollama-review: allow
+    local-ollama-private-worker: allow
+    local-ollama-builder: allow
     local-smollm3-analyst: allow
     local-llama32-analyst: allow
     review: allow
@@ -84,7 +84,7 @@ Rate limits and timeouts are usually **provider-wide**, not model-specific. If N
 - `opencode/deepseek-v4-flash-free` → provider: `opencode`
 - `opencode-go/deepseek-v4-flash` → provider: `opencode-go`
 - `cerebras/gpt-oss-120b` → provider: `cerebras`
-- `qwythos-9b-local` → provider: `local` (special case, no slash)
+- `ollama-9b-local` → provider: `local` (special case, no slash)
 
 ### Provider-aware model selection (failover steps)
 
@@ -187,7 +187,7 @@ PLANNING → AWAITING_APPROVAL → BASELINE_TESTING → IMPLEMENTING → (VERIFY
                                                                               ↓
                                                                           FIXING ──→ (back to VERIFYING + REVIEWING, max 2 cycles per tier)
                                                                               │
-                                                                              ├─ free tier exhausted → LOCAL tier (Qwythos)
+                                                                              ├─ free tier exhausted → LOCAL tier (Ollama)
                                                                               │     after 2 failed cycles → PAID tier
                                                                               │
                                                                               ├─ FREE tier quality fail → ESCALATING
@@ -497,7 +497,7 @@ This system is configured for free-first cloud routing. Paid models from opencod
  a. Primary free/local model first
  b. Secondary free model (different provider)
  c. Paid fallback (last resort)
-4. Skip models where `enabled: false` (e.g., Qwythos local model before GPU audit).
+4. Skip models where `enabled: false` (e.g., Ollama local model before GPU audit).
 5. Skip models in cooldown (check `cooldown_until` field).
 6. Read `config/model-registry.json` for capability scores and privacy classification.
 

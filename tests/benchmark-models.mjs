@@ -126,7 +126,7 @@ function getConfig() {
 }
 
 const MODELS = [
-  'rx580-qwythos/qwythos-9b-local',
+  'rx580-ollama/ollama-9b-local',
   'rx580-smollm3/smollm3-3b-local',
   'rx580-qwen3/qwen3-4b-local',
   'rx580-llama32/llama32-3b-local'

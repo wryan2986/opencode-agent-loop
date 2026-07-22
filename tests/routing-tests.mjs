@@ -42,8 +42,8 @@ function createMockRegistry(overrides = {}) {
           status: 'active',
           costPerCall: 0,
         },
-        'qwythos-9b-local': {
-          name: 'qwythos-9b-local',
+        'ollama-9b-local': {
+          name: 'ollama-9b-local',
           tier: 'free',
           cloud: false,
           local: true,
@@ -93,8 +93,8 @@ function createMockRegistry(overrides = {}) {
           name: 'openrouter-free-1', tier: 'free', cloud: true,
           via: 'openrouter', status: 'active', costPerCall: 0,
         },
-        'qwythos-9b-local': {
-          name: 'qwythos-9b-local', tier: 'free', cloud: false,
+        'ollama-9b-local': {
+          name: 'ollama-9b-local', tier: 'free', cloud: false,
           local: true, status: 'pending-gpu-audit', costPerCall: 0,
         },
         'paid-model-premium': {
@@ -573,22 +573,22 @@ async function testPendingLocalModelSkipped() {
   const registry = createMockRegistry();
   let localModelCalled = false;
   const failover = createMockFailoverHandler({
-    'qwythos-9b-local': async () => {
+    'ollama-9b-local': async () => {
       localModelCalled = true;
-      return { success: true, output: 'ok', modelUsed: 'qwythos-9b-local' };
+      return { success: true, output: 'ok', modelUsed: 'ollama-9b-local' };
     },
     'free-model-alpha': async () => ({ success: true, output: 'ok', modelUsed: 'free-model-alpha' }),
   });
 
   const pool = {
-    freeCloud: ['qwythos-9b-local', 'free-model-alpha'],
+    freeCloud: ['ollama-9b-local', 'free-model-alpha'],
     task: 'Search codebase',
   };
 
   const result = await selectModelFromPool(pool, 'explorer', registry, { failoverHandler: failover });
 
   return {
-    name: 'Pending local model (qwythos-9b-local) is skipped',
+    name: 'Pending local model (ollama-9b-local) is skipped',
     passed: result.success === true
       && result.modelUsed === 'free-model-alpha'
       && localModelCalled === false,

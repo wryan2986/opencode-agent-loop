@@ -1,6 +1,6 @@
 ---
 mode: subagent
-model: rx580-llama/qwythos-9b-local
+model: ollama/llama-3.2-3b-local
 temperature: 0.1
 steps: 60
 description: >
@@ -29,9 +29,9 @@ permission:
     restore: deny
 ---
 
-# Local Qwythos Preliminary Review Agent
+# Local Ollama Preliminary Review Agent
 
-You are a preliminary code review agent running on a local Qwythos 9B model.
+You are a preliminary code review agent running on a local Ollama 9B model.
 
 ## Role
 

@@ -16,9 +16,9 @@
     "Three builder tiers: trivial-builder (north-mini-code) \u2192 build-worker (Mistral Small 4 / DeepSeek Free) \u2192 build-worker-paid \u2192 escalation.",
     "The orchestrator selects the subagent type based on task complexity, not builderTier.",
     "Free-tier quality failures skip local tier and go directly to escalation.",
-    "Local Qwythos agents are available: local-qwythos-explore (read-only exploration), local-qwythos-test-fixer (narrow test repair), local-qwythos-review (preliminary review), local-qwythos-private-worker (sensitive/local-only tasks), local-qwythos-builder (small-medium bounded changes).",
-    "Qwythos is excluded from primary orchestration and final security review.",
-    "Qwythos failure must not trigger paid fallback while suitable free cloud models remain."
+    "Local Ollama agents are available: local-ollama-explore (read-only exploration), local-ollama-test-fixer (narrow test repair), local-ollama-review (preliminary review), local-ollama-private-worker (sensitive/local-only tasks), local-ollama-builder (small-medium bounded changes).",
+    "Ollama is excluded from primary orchestration and final security review.",
+    "Ollama failure must not trigger paid fallback while suitable free cloud models remain."
   ],
   "default_agent": "orchestrator",
   "plugin": [

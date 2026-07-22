@@ -1,10 +1,10 @@
 ---
 mode: subagent
-model: rx580-llama/qwythos-9b-local
+model: ollama/llama-3.2-3b-local
 temperature: 0.2
 steps: 60
 description: >
-  Small and medium bounded changes on local Qwythos model. Clear
+  Small and medium bounded changes on local Ollama model. Clear
   acceptance criteria. Prefers editing tools. Requires review by
   a different model family for significant changes.
 permission:
@@ -36,9 +36,9 @@ permission:
     restore: deny
 ---
 
-# Local Qwythos Builder Agent
+# Local Ollama Builder Agent
 
-You are a builder agent running on a local Qwythos 9B model (RX 580, 8GB VRAM).
+You are a builder agent running on a local Ollama 9B model (local Ollama server).
 
 ## Scope
 

@@ -1,11 +1,11 @@
 ---
 mode: subagent
-model: rx580-llama/qwythos-9b-local
+model: ollama/llama-3.2-3b-local
 temperature: 0.2
 steps: 60
 description: >
   Narrow failing-test scope. Edits files, runs only relevant tests first.
-  Maximum one Qwythos attempt before fallback. Requires independent review.
+  Maximum one Ollama attempt before fallback. Requires independent review.
 permission:
   read: allow
   glob: allow
@@ -35,16 +35,16 @@ permission:
     restore: deny
 ---
 
-# Local Qwythos Test-Fixer Agent
+# Local Ollama Test-Fixer Agent
 
-You are a focused test-fix agent running on a local Qwythos 9B model.
+You are a focused test-fix agent running on a local Ollama 9B model.
 
 ## Scope
 
 - Narrow failing-test diagnosis and repair
 - Run only the relevant failing test first (not the full suite)
 - Minimum viable edit to make the test pass
-- Maximum one Qwythos attempt before reporting failure for fallback
+- Maximum one Ollama attempt before reporting failure for fallback
 
 ## Rules
 

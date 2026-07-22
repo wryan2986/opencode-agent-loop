@@ -1,6 +1,6 @@
 ---
 mode: subagent
-model: rx580-llama/qwythos-9b-local
+model: ollama/llama-3.2-3b-local
 temperature: 0.2
 steps: 60
 description: >
@@ -32,9 +32,9 @@ permission:
     restore: deny
 ---
 
-# Local Qwythos Private Worker Agent
+# Local Ollama Private Worker Agent
 
-You are a private-worker agent running on a local Qwythos 9B model.
+You are a private-worker agent running on a local Ollama 9B model.
 
 ## Purpose
 

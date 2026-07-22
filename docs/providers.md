@@ -53,17 +53,17 @@ Paid models with zero-retention privacy policy.
 | gpt-5.6-luna | Escalation primary | Medium reasoning |
 | gpt-5.5 | Escalation fallback | Available as backup |
 
-### Local Qwythos 9B
+### Local Ollama 9B
 
 Runs on local GPU (RX 580) for sensitive or offline tasks.
 
 | Agent | Purpose |
 |-------|---------|
-| local-qwythos-explore | Read-only exploration |
-| local-qwythos-test-fixer | Narrow test repair |
-| local-qwythos-review | Preliminary review |
-| local-qwythos-private-worker | Sensitive/local-only tasks |
-| local-qwythos-builder | Small-medium bounded changes |
+| local-ollama-explore | Read-only exploration |
+| local-ollama-test-fixer | Narrow test repair |
+| local-ollama-review | Preliminary review |
+| local-ollama-private-worker | Sensitive/local-only tasks |
+| local-ollama-builder | Small-medium bounded changes |
 
 ## Privacy Classification
 

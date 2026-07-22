@@ -75,14 +75,14 @@ The framework defines 10 agent roles, each with specific capabilities, tools, an
 - Permission: read, edit, shell (limited)
 - Restrictions: Cannot commit or push
 
-## Local Agents (Qwythos 9B)
+## Local Agents (Ollama 9B)
 
 Five specialized local agents for sensitive or offline work:
 
-- **local-qwythos-explore**: Read-only exploration
-- **local-qwythos-test-fixer**: Narrow test repair
-- **local-qwythos-review**: Preliminary read-only review
-- **local-qwythos-private-worker**: Sensitive/local-only tasks
-- **local-qwythos-builder**: Small-medium bounded changes
+- **local-ollama-explore**: Read-only exploration
+- **local-ollama-test-fixer**: Narrow test repair
+- **local-ollama-review**: Preliminary read-only review
+- **local-ollama-private-worker**: Sensitive/local-only tasks
+- **local-ollama-builder**: Small-medium bounded changes
 
-All local agents run on the Qwythos 9B model (local GPU) and are restricted from sending data to external providers.
+All local agents run on the Ollama 9B model (local GPU) and are restricted from sending data to external providers.

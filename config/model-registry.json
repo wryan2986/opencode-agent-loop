@@ -2403,8 +2403,8 @@
     },
     {
       "provider": "rx580-llama",
-      "model_id": "qwythos-9b-local",
-      "display_name": "Qwythos 9B Local",
+      "model_id": "ollama-9b-local",
+      "display_name": "Ollama 9B Local",
       "classification": "local-unmetered",
       "free_type": "local-unmetered",
       "enabled": true,
@@ -2437,7 +2437,7 @@
       "paid_fallback_allowed": false,
       "paid_equivalent": null,
       "trial_credit": false,
-      "notes": "Local Qwythos 9B on RX 580 (8GB VRAM). 32K context. 4096 output. No data leaves CasaOS. Suitable for private repos, local-only tasks, test-failure analysis, bounded fixes, and preliminary review.",
+      "notes": "Local Ollama 9B on RX 580 (8GB VRAM). 32K context. 4096 output. No data leaves CasaOS. Suitable for private repos, local-only tasks, test-failure analysis, bounded fixes, and preliminary review.",
       "capability": {
         "verification_status": "provider_failure",
         "execution_role": false,

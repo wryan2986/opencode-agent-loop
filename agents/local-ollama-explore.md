@@ -1,6 +1,6 @@
 ---
 mode: subagent
-model: rx580-llama/qwythos-9b-local
+model: ollama/llama-3.2-3b-local
 temperature: 0.2
 steps: 60
 description: >
@@ -28,9 +28,9 @@ permission:
     restore: deny
 ---
 
-# Local Qwythos Explore Agent
+# Local Ollama Explore Agent
 
-You are a read-only exploration agent running on a local Qwythos 9B model (RX 580, 8GB VRAM).
+You are a read-only exploration agent running on a local Ollama 9B model (local Ollama server).
 
 ## Capabilities
 

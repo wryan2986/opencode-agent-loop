@@ -51,7 +51,7 @@ The system uses paid-primary routing with automatic failover:
 
 1. Primary paid model configured per role
 2. On failure (rate limit, timeout): try free fallback from different provider
-3. On repeated failure: try local Qwythos 9B model
+3. On repeated failure: try local Ollama 9B model
 4. On all failures: escalate to diagnosis agent
 
 See docs/providers.md for model configuration details.
