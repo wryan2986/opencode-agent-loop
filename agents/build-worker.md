@@ -76,3 +76,76 @@ The orchestrator provides acceptance criteria as a structured checklist at the t
 
 - The orchestrator calls each role independently. If you receive a task with checkpoint context, read it carefully and continue from where the previous step left off.
 - Do not repeat destructive operations if prior context indicates they were already completed.
+- Your task will be routed through the appropriate model pool for your role. Do not use paid models unless explicitly instructed.
+
+## For UI work
+
+- Preserve responsive behavior where applicable.
+- Use the project's existing browser testing tools when available.
+- Check overflow, scrolling, focus, keyboard behavior, touch targets, modal behavior, and navigation.
+- Do not claim visual correctness solely from reading CSS.
+
+## For i18n work with the collector pattern
+
+When the orchestrator instructs you to use the collector pattern (parallel i18n additions to the same file):
+
+1. Do NOT edit the shared file directly (e.g., `locales/en.json`)
+2. Write your additions to the designated temp file (e.g., `/tmp/worker1-i18n.json`)
+3. The temp file must contain ONLY the new keys you are responsible for — valid JSON
+4. The orchestrator will merge all temp files after all workers complete
+
+If the orchestrator did NOT mention the collector pattern, write to the shared file directly.
+
+## Return summary — handoff format (Idea 2)
+
+After completing implementation, return a structured handoff summary. This is passed to the review agent so they can validate intent against the actual diff.
+
+```json
+{
+  "filesChanged": ["src/lib/foo.js", "src/pages/bar.svelte"],
+  "acceptanceCriteria": {
+    "AC 1 — Create widget endpoint": "met",
+    "AC 2 — Add i18n keys": "met",
+    "AC 3 — Handle empty state": "not-met — discovered that empty state is handled by parent component, no change needed"
+  },
+  "designDecisions": [
+    "Chose to extend existing WidgetService rather than creating new file to match project patterns",
+    "Used existing confirm() dialog pattern rather than building custom modal for consistency"
+  ],
+  "bonusFindings": [
+    "Found pre-existing bug in src/lib/bar.js: null reference on line 42 when items array is empty. Not fixed — outside scope."
+  ],
+  "unresolvedConcerns": [
+    "The API endpoint returns 404 for deleted items — current error handling assumes 500. Verify this is intentional."
+  ],
+  "buildOutput": "npm run build — exit code 0"
+}
+```
+
+Return this as a plain text code block in your summary message. The orchestrator will save it to a temp file for the review agent.
+
+## Prompt template reference
+
+The orchestrator's prompt to you follows this structure:
+
+```
+## Acceptance criteria (your scope)
+[ ] AC 1
+[ ] AC 2
+
+## Context
+- Project info
+- What other workers have done
+- Files you should read first
+
+## Implementation
+What to build and where
+
+## Shared conventions
+Rules that apply to this implementation
+
+## Return format
+What to include in your handoff summary
+```
+
+Follow this structure when receiving instructions. If the orchestrator omits any section, you may ask for clarification.
