@@ -1,0 +1,32 @@
+name: Discover OpenCode patch base
+
+on:
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  patch-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        opencode-ref:
+          - 14a5529793a91001ca81c80e96f39533eab79127
+          - adf178a6b95c61506ddaadaf4dd062badb4a8fda
+          - 78f85b1cd65b4d2b56c15d8f128b0e5a19d22895
+          - 888dc67cc3d47d5b8c3bbcea361df55e20cd9754
+          - fd9ee435ec3a45e03e400b8a9eb4b50e407addc2
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: anomalyco/opencode
+          ref: ${{ matrix.opencode-ref }}
+          path: upstream-opencode
+          fetch-depth: 1
+      - name: Check patch
+        working-directory: upstream-opencode
+        run: git apply --check ../patches/opencode-subagent-failure-exposure.patch
