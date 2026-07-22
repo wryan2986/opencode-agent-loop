@@ -74,7 +74,9 @@ The runtime limits parent orchestration with a workflow-call ceiling and a reduc
 
 ## Paid fallback audit state
 
-Paid fallback selections and call counters are persisted per project under `.opencode/agent-loop-state/`. The audit log contains only model, role, failure-code, and outcome metadata; it excludes prompts and credentials. Persistent counters prevent a process restart from resetting per-task or global paid-call ceilings.
+Paid fallback selections and call counters are persisted per project under `.opencode/agent-loop-state/`. The audit log contains only model, role, failure-code, and outcome metadata; it excludes prompts and credentials. Persistence prevents a process restart from resetting paid-call ceilings.
+
+The global call limit uses a rolling window controlled by `paid_fallback_global_window_minutes`—24 hours by default—rather than becoming a permanent lifetime lockout. Per-task counters are pruned after `paid_fallback_task_state_ttl_minutes`, also 24 hours by default.
 
 ## Structured events
 
