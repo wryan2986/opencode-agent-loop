@@ -1,6 +1,6 @@
 {
   "$schema": "./free-first-config-schema.json",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "general": {
     "free_first": true,
     "allow_paid_fallback": true,
@@ -148,6 +148,8 @@
     "max_output_tokens_per_task": 50000,
     "max_cost_usd_per_task": 1,
     "fail_closed_on_unknown_pricing": false,
+    "ledger_ttl_minutes": 1440,
+    "max_tracked_tasks": 1000,
     "unknown_paid_model_pricing": {
       "input_per_million_usd": 5,
       "output_per_million_usd": 15,
