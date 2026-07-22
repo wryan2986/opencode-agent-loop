@@ -1,93 +1,69 @@
-# Required OpenCode Fork
+# Required OpenCode Patch
 
-The OpenCode Agent Loop requires a **patched version of OpenCode** to function correctly. The stock OpenCode release does not expose subagent task failures to the orchestrator — it treats all subagent exits as success.
+OpenCode Agent Loop currently requires a patched OpenCode build. The stock release does not expose all subagent failure information needed for reliable model failover.
 
-## The Problem
+## Why the patch is required
 
-When a subagent (build-worker, test agent, review agent, etc.) fails — whether due to a provider error, rate limit, or task failure — the standard OpenCode `task` tool returns success to the caller. The orchestrator cannot distinguish between "task completed successfully" and "task failed with an error."
+When a delegated agent fails because of a provider error, rate limit, timeout, quota problem, or non-retryable request error, the orchestrator must receive a structured failure. Without the patch, some failed task-tool calls can appear successful to the caller.
 
-## The Fix
+That can cause the workflow to:
 
-The patch in `patches/opencode-subagent-failure-exposure.patch` applies the following changes to OpenCode:
+- advance after an implementation failed
+- skip model failover
+- misclassify transient and permanent provider errors
+- verify or review an incomplete change
 
-| File | Change |
-|------|--------|
-| `packages/opencode/src/provider/classify.ts` | (New) Provider error classification: rate_limit, quota, auth_error, context_overflow, etc. |
-| `packages/opencode/src/tool/task.ts` | Capture provider errors as structured `taskError` in tool release phase |
-| `packages/opencode/src/session/processor.ts` | Surface subagent retry status and failure details through processor cleanup |
-| `packages/opencode/src/session/retry.ts` | Only retry truly transient errors; fail fast for non-retryable failures |
-| `packages/opencode/src/session/llm.ts` | Handle provider selection with model override from task tool |
+## Patch contents
 
-## Applying the Patch
+The repository includes:
+
+```text
+patches/opencode-subagent-failure-exposure.patch
+```
+
+The patch adds or updates behavior for:
+
+- task-level model overrides
+- provider-error classification
+- subagent retry and failure metadata
+- non-retryable free-usage-limit handling
+- child-session failure propagation
+- resilient session-title generation
+
+## Build process
+
+OpenCode's source repository and build commands can change. Follow the current upstream development instructions for prerequisites and building, then apply this repository's patch before compiling.
+
+A typical flow is:
 
 ```bash
-# Clone OpenCode
-git clone https://github.com/sst/opencode.git
+# Clone the current official OpenCode source repository.
+git clone https://github.com/anomalyco/opencode.git
 cd opencode
 
-# Apply the patch
-git apply /path/to/opencode-agent-loop/patches/opencode-subagent-failure-exposure.patch
+# Apply the patch from this repository.
+git apply /absolute/path/to/opencode-agent-loop/patches/opencode-subagent-failure-exposure.patch
 
-# Build
-npm run build
+# Install and build using the commands documented by upstream.
 ```
 
-## Verifying the Patch
+Do not assume an old `npm run build` command remains valid. Use the package manager and build procedure specified by the checked-out OpenCode revision.
 
-After applying, run the task tool tests to confirm:
+## Verify the patched behavior
 
-```bash
-cd packages/opencode
-npm test -- --grep "task"
-```
+At minimum, verify these cases before using the loop on important work:
 
-The following test behaviors should be present:
+1. A subagent provider failure is surfaced as a structured failure.
+2. A rate limit is classified separately from authentication or billing errors.
+3. Non-retryable failures stop retrying promptly.
+4. A free-usage-limit failure allows the orchestrator to select another model.
+5. A task-level model override reaches the child session.
+6. Cancelling or aborting a child task does not erase its failure metadata.
 
-1. **Subagent provider failures are surfaced** — When a subagent encounters a provider error (429, 503, etc.), the task tool returns a structured `taskError` instead of success.
-2. **Non-retryable errors fail fast** — Auth failures, billing errors, and content-filter rejections are not retried.
-3. **Free-usage limits are non-retryable** — When a free tier model hits its usage limit, it fails immediately rather than retrying, allowing the orchestrator to fall back to a paid model.
-4. **Provider errors are classified** — Errors are classified as rate_limit, quota, auth_error, context_overflow, content_filter, cancelled, or api_error.
+Run the relevant upstream task, retry, session, and provider tests for the exact revision you built.
 
-## Without the Patch
+## Compatibility warning
 
-The agent loop will **not work correctly** without these patches. The orchestrator will:
+This patch is revision-sensitive. It may fail to apply cleanly after upstream changes, or it may apply while no longer producing the intended behavior. Treat a clean `git apply` as necessary but not sufficient; run the verification tests.
 
-- Treat failed subagent calls as successful
-- Continue to the next stage even when implementation failed
-- Not detect when a model provider returns an error
-- Be unable to differentiate between transient and permanent failures
-
-## Alternative: Use the OpenCode Fork
-
-If you prefer not to patch manually, you can use the maintainer's fork which includes these changes:
-
-```bash
-git clone https://github.com/sst/opencode.git
-# Or use a fork that includes these commits
-```
-
-The specific commits (in order):
-1. `feat(opencode): allow task model override`
-2. `fix(opencode): surface subagent task failures`
-3. `fix(opencode): classify subagent provider failures`
-4. `fix(opencode): surface subagent retry status`
-5. `fix(opencode): surface subagent retry detail through processor cleanup`
-6. `fix(opencode): read task child session ID from part.metadata too`
-7. `fix(opencode): write subagentFailure to part metadata on abort before child cancel`
-8. `fix(opencode): capture retry status in task tool release phase before child cancel`
-9. `fix(opencode): make FreeUsageLimitError non-retryable to unblock orchestrator fallback`
-10. `fix(opencode): only retry truly transient errors, fail fast for all others`
-11. `fix: make session title generation error-resilient with heuristic fallback`
-
-### Title Generation Fix
-
-The latest commit addresses a side effect of the retry changes: session title generation
-(the "New session" name issue). When the LLM call for generating a session title fails
-(rate limit, quota, timeout), two safeguards now apply:
-
-1. **Broader getSmallModel fallback** - For opencode providers, the small model search
-   now tries gemini-flash and claude-haiku families after gpt-nano, making it more
-   likely to find a working model for lightweight tasks like title generation.
-2. **Heuristic fallback title** - If the LLM call fails entirely, the system extracts a
-   title from the user first message text instead of leaving the default "New session" name.
-
+The long-term goal is to remove this requirement by relying on equivalent upstream behavior or a stable provider/task extension interface.
