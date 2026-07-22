@@ -39,8 +39,8 @@ if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets)) {
   nonNegativeNumber(budgets.max_input_tokens_per_task, 'budgets.max_input_tokens_per_task', { integer: true, nullable: true });
   nonNegativeNumber(budgets.max_output_tokens_per_task, 'budgets.max_output_tokens_per_task', { integer: true, nullable: true });
   nonNegativeNumber(budgets.max_cost_usd_per_task, 'budgets.max_cost_usd_per_task', { nullable: true });
-  nonNegativeNumber(budgets.max_workflow_calls_per_task, 'budgets.max_workflow_calls_per_task', { integer: true, nullable: true });
-  if (budgets.max_workflow_calls_per_task !== null && budgets.max_workflow_calls_per_task < 1) fail('budgets.max_workflow_calls_per_task must be at least 1');
+  nonNegativeNumber(budgets.max_workflow_calls_per_task, 'budgets.max_workflow_calls_per_task', { integer: true });
+  if (budgets.max_workflow_calls_per_task < 1) fail('budgets.max_workflow_calls_per_task must be at least 1');
   if (typeof budgets.persist_state !== 'boolean') fail('budgets.persist_state must be boolean');
   if (typeof budgets.state_path !== 'string' || !budgets.state_path) fail('budgets.state_path must be a non-empty string');
   nonNegativeNumber(budgets.ledger_ttl_minutes, 'budgets.ledger_ttl_minutes', { integer: true });
