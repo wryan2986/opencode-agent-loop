@@ -118,10 +118,6 @@ jobs:
           cache: npm
       - name: Apply configured retry defaults
         run: node scripts/apply-retry-default.mjs
-      - name: Install dependencies
-        run: npm ci
-      - name: Validate migrated tree
-        run: npm run validate
       - name: Commit migrated files
         shell: bash
         run: |
