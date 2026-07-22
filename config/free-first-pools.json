@@ -3,29 +3,19 @@
     "orchestrator": {
       "models": [
         {
-          "model_id": "openai/gpt-5.6-luna",
+          "model_id": "opencode-go/deepseek-v4-flash",
           "role": "primary",
           "enabled": true
         },
         {
           "model_id": "opencode/mimo-v2.5-free",
           "role": "free-fallback",
-          "enabled": true,
-          "cooldown_until": "2026-07-09T20:50:54Z",
-          "consecutive_failures": 2,
-          "last_failure_reason": "rate_limit: test agent Rate limit exceeded"
+          "enabled": true
         },
         {
           "model_id": "nvidia/qwen/qwen3-coder-480b-a35b-instruct",
           "role": "free-fallback",
           "enabled": false
-        },
-        {
-          "model_id": "opencode-go/deepseek-v4-flash",
-          "role": "paid-fallback",
-          "enabled": true,
-          "cooldown_until": null,
-          "consecutive_failures": 0
         },
         {
           "model_id": "opencode-go/deepseek-v4-pro",
@@ -46,33 +36,22 @@
         {
           "model_id": "cerebras/gpt-oss-120b",
           "role": "primary",
-          "enabled": true,
-          "cooldown_until": "2026-07-08T18:39:27Z",
-          "consecutive_failures": 1,
-          "last_failure_reason": "rate_limit: Tokens per minute limit exceeded - too many tokens processed."
+          "enabled": true
         },
         {
           "model_id": "opencode/deepseek-v4-flash-free",
           "role": "free-fallback",
-          "enabled": true,
-          "consecutive_failures": 1,
-          "cooldown_until": "2026-07-09T20:50:54Z",
-          "last_failure_reason": "rate_limit: test agent Rate limit exceeded"
+          "enabled": true
         },
         {
           "model_id": "nvidia/mistralai/mistral-small-4-119b-2603",
           "role": "free-fallback",
-          "enabled": true,
-          "cooldown_until": "2026-07-09T19:41:37Z",
-          "consecutive_failures": 1,
-          "last_failure_reason": "rate_limit: review agent 429 Too Many Requests"
+          "enabled": true
         },
         {
           "model_id": "opencode-go/deepseek-v4-flash",
           "role": "paid-fallback",
-          "enabled": true,
-          "cooldown_until": null,
-          "consecutive_failures": 0
+          "enabled": true
         }
       ],
       "selection_strategy": "ordered-failover",
@@ -93,26 +72,17 @@
         {
           "model_id": "opencode/north-mini-code-free",
           "role": "free-fallback",
-          "enabled": true,
-          "cooldown_until": "2026-07-09T20:50:54Z",
-          "consecutive_failures": 2,
-          "last_failure_reason": "rate_limit: test agent Rate limit exceeded"
+          "enabled": true
         },
         {
           "model_id": "nvidia/mistralai/mistral-small-4-119b-2603",
           "role": "free-fallback",
-          "enabled": true,
-          "cooldown_until": "2026-07-09T19:41:37Z",
-          "consecutive_failures": 1,
-          "last_failure_reason": "rate_limit: review agent 429 Too Many Requests"
+          "enabled": true
         },
         {
           "model_id": "opencode/big-pickle",
           "role": "free-fallback",
-          "enabled": true,
-          "cooldown_until": "2026-07-09T20:50:54Z",
-          "consecutive_failures": 2,
-          "last_failure_reason": "rate_limit: test agent Rate limit exceeded"
+          "enabled": true
         },
         {
           "model_id": "opencode-go/deepseek-v4-flash",
@@ -138,17 +108,12 @@
         {
           "model_id": "cerebras/gemma-4-31b",
           "role": "free-fallback",
-          "enabled": true,
-          "cooldown_until": "2026-07-08T18:39:27Z",
-          "consecutive_failures": 1,
-          "last_failure_reason": "rate_limit: Tokens per minute limit exceeded - too many tokens processed."
+          "enabled": true
         },
         {
           "model_id": "opencode-go/mimo-v2.5",
           "role": "paid-fallback",
-          "enabled": true,
-          "cooldown_until": null,
-          "consecutive_failures": 0
+          "enabled": true
         },
         {
           "model_id": "opencode-go/deepseek-v4-pro",
@@ -169,33 +134,22 @@
         {
           "model_id": "cerebras/gemma-4-31b",
           "role": "primary",
-          "enabled": true,
-          "cooldown_until": "2026-07-08T18:39:27Z",
-          "consecutive_failures": 1,
-          "last_failure_reason": "rate_limit: Tokens per minute limit exceeded - too many tokens processed."
+          "enabled": true
         },
         {
           "model_id": "cerebras/gpt-oss-120b",
           "role": "free-fallback",
-          "enabled": true,
-          "cooldown_until": "2026-07-08T18:39:27Z",
-          "consecutive_failures": 1,
-          "last_failure_reason": "rate_limit: Tokens per minute limit exceeded - too many tokens processed."
+          "enabled": true
         },
         {
           "model_id": "opencode/deepseek-v4-flash-free",
           "role": "free-fallback",
-          "enabled": true,
-          "consecutive_failures": 1,
-          "cooldown_until": "2026-07-09T20:50:54Z",
-          "last_failure_reason": "rate_limit: test agent Rate limit exceeded"
+          "enabled": true
         },
         {
           "model_id": "opencode-go/deepseek-v4-flash",
           "role": "paid-fallback",
-          "enabled": true,
-          "cooldown_until": null,
-          "consecutive_failures": 0
+          "enabled": true
         }
       ],
       "selection_strategy": "ordered-failover",
@@ -211,33 +165,22 @@
         {
           "model_id": "opencode/north-mini-code-free",
           "role": "primary",
-          "enabled": true,
-          "cooldown_until": "2026-07-09T20:50:54Z",
-          "consecutive_failures": 2,
-          "last_failure_reason": "rate_limit: test agent Rate limit exceeded"
+          "enabled": true
         },
         {
           "model_id": "cerebras/gpt-oss-120b",
           "role": "free-fallback",
-          "enabled": true,
-          "cooldown_until": "2026-07-08T18:39:27Z",
-          "consecutive_failures": 1,
-          "last_failure_reason": "rate_limit: Tokens per minute limit exceeded - too many tokens processed."
+          "enabled": true
         },
         {
           "model_id": "opencode/big-pickle",
           "role": "free-fallback",
-          "enabled": true,
-          "cooldown_until": "2026-07-09T20:50:54Z",
-          "consecutive_failures": 2,
-          "last_failure_reason": "rate_limit: test agent Rate limit exceeded"
+          "enabled": true
         },
         {
           "model_id": "opencode-go/deepseek-v4-flash",
           "role": "paid-fallback",
-          "enabled": true,
-          "cooldown_until": null,
-          "consecutive_failures": 0
+          "enabled": true
         }
       ],
       "selection_strategy": "ordered-failover",
@@ -253,26 +196,17 @@
         {
           "model_id": "nvidia/mistralai/mistral-large-3-675b-instruct-2512",
           "role": "primary",
-          "enabled": true,
-          "cooldown_until": "2026-07-09T19:41:37Z",
-          "consecutive_failures": 1,
-          "last_failure_reason": "rate_limit: review agent 429 Too Many Requests"
+          "enabled": true
         },
         {
           "model_id": "cerebras/gpt-oss-120b",
           "role": "free-fallback",
-          "enabled": true,
-          "cooldown_until": "2026-07-08T18:39:27Z",
-          "consecutive_failures": 1,
-          "last_failure_reason": "rate_limit: Tokens per minute limit exceeded - too many tokens processed."
+          "enabled": true
         },
         {
           "model_id": "opencode/deepseek-v4-flash-free",
           "role": "free-fallback",
-          "enabled": true,
-          "consecutive_failures": 1,
-          "cooldown_until": "2026-07-09T20:50:54Z",
-          "last_failure_reason": "rate_limit: test agent Rate limit exceeded"
+          "enabled": true
         },
         {
           "model_id": "opencode-go/mimo-v2.5",
@@ -308,34 +242,22 @@
         {
           "model_id": "nvidia/mistralai/mistral-large-3-675b-instruct-2512",
           "role": "free-fallback",
-          "enabled": true,
-          "cooldown_until": "2026-07-09T19:41:37Z",
-          "consecutive_failures": 1,
-          "last_failure_reason": "rate_limit: review agent 429 Too Many Requests"
+          "enabled": true
         },
         {
           "model_id": "opencode/deepseek-v4-flash-free",
           "role": "free-fallback",
-          "enabled": true,
-          "consecutive_failures": 1,
-          "cooldown_until": "2026-07-09T20:50:54Z",
-          "last_failure_reason": "rate_limit: test agent Rate limit exceeded"
+          "enabled": true
         },
         {
           "model_id": "cerebras/gpt-oss-120b",
           "role": "free-fallback",
-          "enabled": true,
-          "cooldown_until": "2026-07-08T18:39:27Z",
-          "consecutive_failures": 1,
-          "last_failure_reason": "rate_limit: Tokens per minute limit exceeded - too many tokens processed."
+          "enabled": true
         },
         {
           "model_id": "opencode-go/deepseek-v4-flash",
           "role": "paid-fallback",
-          "enabled": true,
-          "consecutive_failures": 0,
-          "cooldown_until": null,
-          "last_failure_reason": null
+          "enabled": true
         }
       ],
       "selection_strategy": "ordered-failover",
@@ -351,25 +273,17 @@
         {
           "model_id": "opencode/big-pickle",
           "role": "primary",
-          "enabled": true,
-          "cooldown_until": "2026-07-09T20:50:54Z",
-          "consecutive_failures": 2,
-          "last_failure_reason": "rate_limit: test agent Rate limit exceeded"
+          "enabled": true
         },
         {
           "model_id": "opencode/north-mini-code-free",
           "role": "free-fallback",
-          "enabled": true,
-          "cooldown_until": "2026-07-09T20:50:54Z",
-          "consecutive_failures": 2,
-          "last_failure_reason": "rate_limit: test agent Rate limit exceeded"
+          "enabled": true
         },
         {
           "model_id": "opencode-go/deepseek-v4-flash",
           "role": "paid-fallback",
-          "enabled": true,
-          "cooldown_until": null,
-          "consecutive_failures": 0
+          "enabled": true
         }
       ],
       "selection_strategy": "ordered-failover",
