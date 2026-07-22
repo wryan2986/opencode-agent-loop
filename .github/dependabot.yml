@@ -10,8 +10,6 @@ updates:
     commit-message:
       prefix: "chore"
       prefix-development: "chore"
-    reviewers:
-      - "maintainer"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
