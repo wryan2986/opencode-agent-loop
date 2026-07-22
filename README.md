@@ -46,111 +46,40 @@ The agent-loop provides a complete feature lifecycle: plan → approve → test 
 The agent-loop implements a complete feature development lifecycle with six specialized agents working in sequence:
 
 ```
-     User request
-          │
-          ▼
-┌──────────────────────────────────────────────┐
-│           Free-First Router                   │
-│    (model selection + failover)               │
-│    Reads config/free-first-pools.json         │
-│    Tries free models → paid fallback          │
-└───────────────────────┬───────────────────────┘
-                        │ selects model for each role
-                        ▼
-┌──────────────────────────────────────────────────┐
-│               Orchestrator                        │
-│   (DeepSeek V4 Flash)                            │
-│   Plans, delegates, enforces stages               │
-└────────┬─────────────┬──────────┬───────┬───────┬─┘
-         │             │          │       │       │
-         ▼             ▼          ▼       ▼       ▼
-    ┌────────┐   ┌────────┐  ┌────────┐ ┌────────┐ ┌────────┐
-    │  test  │   │  bld   │  │  rev   │ │  esc   │ │  rec   │
-    │  Free  │   │  Free  │  │  Free  │ │ GPT-5  │ │  Paid  │
-    │  Pool  │   │  Pool  │  │  Pool  │ │ .6 L   │ │  DS Fl │
-    └───┬────┘   └───┬────┘  └───┬────┘ └───┬────┘ └───┬────┘
-        │           │           │         │          │
-        └─────┬─────┘           │         │          │
-              │                 │         │          │
-              └────────┬────────┘         │          │
-                       │                  │          │
-                       └─────────┬────────┘          │
-                                 │                   │
-                                 └──────────┬────────┘
-                                            ▼
-┌─────────────────────────────────────────────────────────┐
-│                    Model Registry                        │
-│   config/model-registry.json                             │
-│   79 models, 5 providers                                 │
-│   Capability scores, privacy classification, cooldowns   │
-└─────────────────────────────────────────────────────────┘
-```
-The installer:
-- Adds `OPENCODE_CONFIG_DIR` to your shell configuration
-- Makes agent-loop commands available globally
-- Sets up configuration directory structure
+                                   User request
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Free-First Router                           │
+│                  Model selection and failover                       │
+│                                                                     │
+│  Reads: config/free-first-pools.json                                │
+│  Uses:  config/model-registry.json                                  │
+│  Tries free models first, then falls back to paid models            │
+└──────────────────────────────────┬──────────────────────────────────┘
+                                   │ Selects a model for each role
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                           Orchestrator                              │
+│                       DeepSeek V4 Flash                             │
+│               Plans, delegates, and enforces stages                 │
+└────────────┬────────────┬────────────┬────────────┬─────────────────┘
+             │            │            │            │
+             ▼            ▼            ▼            ▼             ▼
+      ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐
+      │    Test    │ │   Build    │ │   Review   │ │  Escalate  │ │  Recover   │
+      │            │ │            │ │            │ │            │ │            │
+      │ Free Pool  │ │ Free Pool  │ │ Free Pool  │ │ GPT-5.6 L  │ │ Paid DS Fl │
+      └────────────┘ └────────────┘ └────────────┘ └────────────┘ └────────────┘
 
----
-
-## ⚙️ Configuration
-
-The agent-loop uses a **paid-primary cloud routing** system with automatic failover across multiple providers.
-
-
-### Model Routing
-
-Each agent role has a defined model pool that is tried in sequence:
-- Paid models first
-- Free models as fallback when all paid options are exhausted
-
-Configuration files:
-- `config/free-first-pools.json` - Model pools per agent role
-- `config/model-registry.json` - 79 models with capability scores and privacy classifications
-- `config/free-first-config.json` - Global failover, cooldown, and privacy settings
-
-See [docs/configuration.md](docs/configuration.md) for detailed configuration reference.
-
-### Key Principles
-
-
-- **Free-first routing**: Each role tries paid models from multiple providers before attempting free fallback
-- **Provider diversity**: No single provider is a single point of failure
-- **Cooldown management**: Models that fail (429, 503, timeout) are placed in cooldown for configurable durations
-- **Task state preservation**: Task state is checkpointed before switching models
-- **Privacy-aware routing**: Sensitive tasks exclude models from providers with unsuitable data policies
-
-
----
-
-## 🛡️ Safety Model
-
-
-The agent-loop implements multiple safety protections:
-
-### Model Selection Safeguards
-
-- **Privacy classification**: Tasks are classified by sensitivity before model assignment
-- **Provider restrictions**: Models from providers with unsuitable data policies are excluded for sensitive tasks
-- **Cooldown enforcement**: Failed models are temporarily disabled to prevent repeated failures
-
-
-### Workflow Safeguards
-
-- **Stage enforcement**: Each workflow stage has explicit entry/exit criteria
-- **Retry limits**: Maximum 2 fix cycles before escalation
-- **Checkpointing**: Task state is preserved across model switches
-- **User approval gates**: Critical decisions require user confirmation
-
-
-See [docs/safety-model.md](docs/safety-model.md) for comprehensive safety documentation.
-
----
-
-## 📋 Workflow Stages
-
-
-```
-PLANNING
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Model Registry                              │
+│                  config/model-registry.json                         │
+│                                                                     │
+│  79 models across 5 providers                                      │
+│  Capability scores, privacy classifications, and cooldowns          │
+└─────────────────────────────────────────────────────────────────────┘
+```PLANNING
 │ Inspect repository, discover commands, produce plan
 ▼
 AWAITING_APPROVAL
