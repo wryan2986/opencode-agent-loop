@@ -73,11 +73,6 @@
           "cooldown_until": "2026-07-09T19:41:37Z",
           "consecutive_failures": 1,
           "last_failure_reason": "rate_limit: review agent 429 Too Many Requests"
-        },
-        {
-          "model_id": "opencode-go/deepseek-v4-flash",
-          "role": "paid-fallback",
-          "enabled": true
         }
       ],
       "selection_strategy": "ordered-failover",
@@ -159,11 +154,6 @@
           "model_id": "opencode-go/deepseek-v4-pro",
           "role": "paid-fallback",
           "enabled": true
-        },
-        {
-          "model_id": "nvidia/qwen/qwen3-coder-480b-a35b-instruct",
-          "role": "quaternary-free",
-          "enabled": false
         }
       ],
       "selection_strategy": "ordered-failover",
@@ -248,11 +238,6 @@
           "cooldown_until": "2026-07-09T20:50:54Z",
           "consecutive_failures": 2,
           "last_failure_reason": "rate_limit: test agent Rate limit exceeded"
-        },
-        {
-          "model_id": "opencode-go/deepseek-v4-flash",
-          "role": "paid-fallback",
-          "enabled": true
         }
       ],
       "selection_strategy": "ordered-failover",
@@ -351,14 +336,6 @@
           "cooldown_until": "2026-07-08T18:39:27Z",
           "consecutive_failures": 1,
           "last_failure_reason": "rate_limit: Tokens per minute limit exceeded - too many tokens processed."
-        },
-        {
-          "model_id": "opencode/deepseek-v4-flash-free",
-          "role": "quaternary-free",
-          "enabled": true,
-          "consecutive_failures": 1,
-          "cooldown_until": "2026-07-09T20:50:54Z",
-          "last_failure_reason": "rate_limit: test agent Rate limit exceeded"
         }
       ],
       "selection_strategy": "ordered-failover",
@@ -393,11 +370,6 @@
           "enabled": true,
           "cooldown_until": null,
           "consecutive_failures": 0
-        },
-        {
-          "model_id": "opencode-go/deepseek-v4-flash",
-          "role": "paid-fallback",
-          "enabled": true
         }
       ],
       "selection_strategy": "ordered-failover",
