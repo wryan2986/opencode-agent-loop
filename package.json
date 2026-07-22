@@ -18,7 +18,9 @@
   },
   "scripts": {
     "test": "node tests/routing-tests.mjs && node tests/runtime-tests.mjs && node tests/tool-integration-tests.mjs && node tests/bypass-detection.mjs",
-    "validate": "bash scripts/validate.sh && node scripts/check-doc-links.mjs"
+    "validate:agents": "bash scripts/validate-agent-configs.sh",
+    "validate:routing": "node scripts/check-routing-defaults.mjs",
+    "validate": "npm run validate:agents && npm run validate:routing && node scripts/check-doc-links.mjs && npm test"
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.18.4"
