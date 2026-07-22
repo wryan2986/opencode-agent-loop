@@ -18,19 +18,19 @@ permission:
   agent_loop: deny
   task: deny
   bash:
-    git status: allow
-    git diff: allow
-    git log: allow
-    git show: allow
-    ls: allow
-    mkdir: allow
-  git:
-    commit: deny
-    push: deny
-    reset: deny
-    clean: deny
-    checkout: deny
-    restore: deny
+    "*": ask
+    "git status*": allow
+    "git diff*": allow
+    "git log*": allow
+    "git show*": allow
+    "ls*": allow
+    "mkdir*": allow
+    "git commit*": deny
+    "git push*": deny
+    "git reset*": deny
+    "git clean*": deny
+    "git checkout*": deny
+    "git restore*": deny
 ---
 
 # Escalation Agent

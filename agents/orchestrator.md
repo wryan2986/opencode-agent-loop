@@ -13,6 +13,7 @@ permission:
   todo: allow
   question: allow
   bash:
+    "*": ask
     git status: allow
     git diff: allow
     git log: allow
@@ -22,6 +23,12 @@ permission:
     git commit: allow
     ls: allow
     mkdir: allow
+    "git commit*": allow
+    "git push*": deny
+    "git reset*": deny
+    "git clean*": deny
+    "git checkout*": deny
+    "git restore*": deny
   task:
     test: allow
     build-worker: allow
@@ -39,12 +46,6 @@ permission:
     reconcile: allow
     explore: allow
     general: allow
-  git:
-    push: deny
-    reset: deny
-    clean: deny
-    checkout: deny
-    restore: deny
 ---
 
 # Orchestrator

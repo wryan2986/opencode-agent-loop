@@ -15,21 +15,21 @@ permission:
   agent_loop: deny
   task: deny
   bash:
-    ls: allow
-    mkdir: allow
-    node: allow
-    npm: allow
-    python: allow
-    git status: allow
-    git diff: allow
-    git log: allow
-  git:
-    commit: deny
-    push: deny
-    reset: deny
-    clean: deny
-    checkout: deny
-    restore: deny
+    "*": ask
+    "ls*": allow
+    "mkdir*": allow
+    "node *": allow
+    "npm *": allow
+    "python *": allow
+    "git status*": allow
+    "git diff*": allow
+    "git log*": allow
+    "git commit*": deny
+    "git push*": deny
+    "git reset*": deny
+    "git clean*": deny
+    "git checkout*": deny
+    "git restore*": deny
 ---
 
 # Local Ollama Private Worker Agent

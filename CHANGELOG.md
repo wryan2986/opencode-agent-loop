@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.1] - 2026-07-22
 
 ### Fixed
 
@@ -10,12 +10,15 @@
 - Clarified the paid orchestrator plus free-first subagent routing strategy.
 - Removed inconsistent hardcoded agent counts from public documentation.
 - Added missing configuration and TUI integration guides.
-- Corrected safety documentation to place Git command restrictions under Bash permissions.
-- Added explicit destructive-Git denials to the build, test, and review agents.
+- Moved destructive Git restrictions into enforced Bash permission patterns for every agent role.
+- Normalized local and paid builder frontmatter and explicit model assignments.
+- Removed mutable cooldown, failure, provider-error, and health-check state from committed routing configuration.
+- Aligned the orchestrator role pool with the paid DeepSeek orchestrator.
+- Added repository-wide agent permission and clean-routing validation to CI.
 - Fixed CI secret-scan exclusions and environment-file detection.
 - Added local Markdown link validation.
 - Removed the invalid Dependabot reviewer entry.
-- Added complete package metadata and validation scripts.
+- Added complete package metadata and synchronized lockfile version metadata.
 
 ## [0.1.0] - 2026-07-22
 

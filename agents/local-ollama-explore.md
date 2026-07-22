@@ -15,17 +15,17 @@ permission:
   agent_loop: deny
   task: deny
   bash:
-    git status: allow
-    git diff: allow
-    git log: allow
-    ls: allow
-  git:
-    commit: deny
-    push: deny
-    reset: deny
-    clean: deny
-    checkout: deny
-    restore: deny
+    "*": deny
+    "git status*": allow
+    "git diff*": allow
+    "git log*": allow
+    "ls*": allow
+    "git commit*": deny
+    "git push*": deny
+    "git reset*": deny
+    "git clean*": deny
+    "git checkout*": deny
+    "git restore*": deny
 ---
 
 # Local Ollama Explore Agent

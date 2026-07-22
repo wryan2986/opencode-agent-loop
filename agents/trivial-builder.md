@@ -14,20 +14,20 @@ permission:
   grep: allow
   write: allow
   edit: allow
-  bash:
-    git status: allow
-    git diff: allow
-    ls: allow
-    mkdir: allow
-    npm run build: allow
   webfetch: deny
   agent_loop: deny
   task: deny
-  git:
-    commit: deny
-    push: deny
-    reset: deny
-    clean: deny
-    checkout: deny
-    restore: deny
+  bash:
+    "*": ask
+    "git status*": allow
+    "git diff*": allow
+    "ls*": allow
+    "mkdir*": allow
+    "npm run build*": allow
+    "git commit*": deny
+    "git push*": deny
+    "git reset*": deny
+    "git clean*": deny
+    "git checkout*": deny
+    "git restore*": deny
 ---
