@@ -115,10 +115,10 @@ export async function runOpenCodeWorker({
 
   // Ensure executable is absolute
   if (executable === 'opencode' && !process.env.AGENT_LOOP_WORKER_EXECUTABLE) {
-    executable = '/home/casaos/.opencode/bin/opencode';
+    executable = process.env.AGENT_LOOP_WORKER_EXECUTABLE || '/usr/local/bin/opencode';
   }
   if (!cwd || cwd === '') {
-    cwd = '/home/casaos/opencode-agent-loop';
+    cwd = process.env.AGENT_LOOP_PROJECT_DIR || process.cwd();
   }
 
   return await new Promise((resolve) => {

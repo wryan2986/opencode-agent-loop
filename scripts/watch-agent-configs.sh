@@ -15,8 +15,8 @@ set -euo pipefail
 PID_FILE="/tmp/opencode-config-watcher.pid"
 LOG_FILE="/tmp/opencode-config-watcher.log"
 WATCH_DIRS=(
-  "/home/casaos/opencode-agent-loop/agents"
-  "/home/casaos/opencode-agent-loop/config"
+  "${PACKAGE_DIR:-.}/agents"
+  "${PACKAGE_DIR:-.}/config"
 )
 
 daemon() {

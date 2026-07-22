@@ -11,7 +11,7 @@ const DEFAULT_STALL_TIMEOUT_MS = 120000; // 120s stall detection (above source-m
 const DEFAULT_RUNS = 3;
 const DEFAULT_CONCURRENCY = 1; // Serial execution
 const DEFAULT_AGENT = 'build';
-const DEFAULT_BINARY = '/home/casaos/.opencode/bin/opencode';
+const DEFAULT_BINARY = process.env.AGENT_LOOP_WORKER_EXECUTABLE || 'opencode';
 
 // ---------------------------------------------------------------------------
 // Executable resolution (exported for unit testing)
@@ -25,7 +25,7 @@ const DEFAULT_BINARY = '/home/casaos/.opencode/bin/opencode';
  * 2. CLI --source <dir>             → source mode (bun run --conditions=browser src/index.ts in <dir>)
  * 3. AGENT_LOOP_WORKER_EXECUTABLE   → binary path, or JSON config object
  * 4. AGENT_LOOP_WORKER_SOURCE_DIR   → source mode via env var
- * 5. DEFAULT_BINARY                  → /home/casaos/.opencode/bin/opencode
+ * 5. DEFAULT_BINARY                  → process.env.AGENT_LOOP_WORKER_EXECUTABLE || 'opencode'
  *
  * Returns { executable, prefixArgs, cwd, label, mode } where:
  *   - executable: string path to the binary/runtime

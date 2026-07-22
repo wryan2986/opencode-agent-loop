@@ -175,7 +175,7 @@ export async function executeAgentTask({
           AGENT_LOOP_TASK_ID: taskId,
           AGENT_LOOP_ROLE: role,
           AGENT_LOOP_MODEL: modelId,
-          AGENT_LOOP_WORKER_EXECUTABLE: '/home/casaos/.opencode/bin/opencode'
+          AGENT_LOOP_WORKER_EXECUTABLE: process.env.AGENT_LOOP_WORKER_EXECUTABLE || 'opencode'
         },
         signal,
         title: taskId,

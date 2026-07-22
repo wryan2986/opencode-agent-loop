@@ -15,7 +15,7 @@
 set -euo pipefail
 
 AGENTS_DIR="${HOME}/.config/opencode/agents"
-POOLS_FILE="/home/casaos/opencode-agent-loop/config/free-first-pools.json"
+POOLS_FILE="${PACKAGE_DIR:-.}/config/free-first-pools.json"
 FIX_MODE=false
 QUIET=false
 

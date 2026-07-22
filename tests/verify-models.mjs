@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync, mkdirSync
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
-const OPCODE = process.env.AGENT_LOOP_WORKER_EXECUTABLE || '/home/casaos/.opencode/bin/opencode';
+const OPCODE = process.env.AGENT_LOOP_WORKER_EXECUTABLE || 'opencode';
 const PASS = { status: 'pass' };
 const FAIL = (reason) => ({ status: 'fail', reason });
 
@@ -102,7 +102,7 @@ async function verifyModel(model, fixtureDir) {
   
   results.test1 = await testBasicResponse(model);
   results.test2 = await testBashTool(model, fixtureDir || '/tmp');
-  results.test3 = await testRepoRead(model, fixtureDir || '/home/casaos/opencode-agent-loop');
+  results.test3 = await testRepoRead(model, fixtureDir || process.env.AGENT_LOOP_PROJECT_DIR || '.');
   results.test4 = await testMultiStep(model);
   results.test5 = await testToolFailureRecovery(model);
 

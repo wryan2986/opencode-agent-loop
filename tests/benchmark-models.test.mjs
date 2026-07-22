@@ -540,7 +540,7 @@ describe('filesystem snapshot scope checks', () => {
   it('preflights the installed OpenCode CLI against a newly-created valid fixture config', () => {
     const dir = createFixture();
     try {
-      const opencode = process.env.AGENT_LOOP_WORKER_EXECUTABLE || '/home/casaos/.opencode/bin/opencode';
+      const opencode = process.env.AGENT_LOOP_WORKER_EXECUTABLE || 'opencode';
       const model = process.env.AGENT_LOOP_PREFLIGHT_MODEL || 'rx580-smollm3/smollm3-3b-local';
       const result = spawnSync(opencode, [
         'run', '--print-logs', '--log-level', 'DEBUG', '--model', model, '--format', 'json', '--dir', dir, '--auto', 'Reply with exactly CONFIG_PREFLIGHT_READY.'
