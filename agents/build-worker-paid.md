@@ -1,5 +1,6 @@
 ---
 mode: subagent
+model: opencode-go/deepseek-v4-flash
 temperature: 0.2
 steps: 150
 description: >
@@ -7,26 +8,27 @@ description: >
   Follows existing project architecture and conventions. Keeps changes
   minimal but complete. Must not commit, push, or perform destructive
   git operations. Used as the final builder tier before escalation.
-edit: allow
-bash:
-  git status: allow
-  git diff: allow
-  git log: allow
-  ls: allow
-  mkdir: allow
-webfetch: deny
-agent_loop: deny
-task: deny
-git:
-  commit: deny
-  push: deny
-  reset: deny
-  clean: deny
-  checkout: deny
-  restore: deny
 permission:
+  read: allow
+  glob: allow
+  grep: allow
+  edit: allow
+  webfetch: deny
   agent_loop: deny
   task: deny
+  bash:
+    "*": ask
+    "git status*": allow
+    "git diff*": allow
+    "git log*": allow
+    "ls*": allow
+    "mkdir*": allow
+    "git commit*": deny
+    "git push*": deny
+    "git reset*": deny
+    "git clean*": deny
+    "git checkout*": deny
+    "git restore*": deny
 ---
 
 # Build Worker — Paid
