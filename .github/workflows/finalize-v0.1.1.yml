@@ -1,0 +1,47 @@
+name: Finalize v0.1.1 branch
+
+on:
+  push:
+    branches:
+      - release/v0.1.1-finalize
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/v0.1.1-finalize
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Finalize release files
+        run: node scripts/finalize-v0.1.1.mjs
+
+      - name: Validate finalized files
+        run: |
+          bash scripts/validate-agent-configs.sh
+          node scripts/check-routing-defaults.mjs
+          npm ci
+          npm test
+
+      - name: Commit generated cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add agents/orchestrator.md config/free-first-pools.json config/model-registry.json CHANGELOG.md package-lock.json
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: finalize v0.1.1 release files"
+          git push origin HEAD:release/v0.1.1-finalize
