@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/wryan2986/opencode-agent-loop/schemas/orchestration-policy-1.0.0.json",
+  "title": "OpenCode Agent Loop Orchestration Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "mode",
+    "require_agent_loop_permit",
+    "require_policy_commit",
+    "permit_ttl_seconds",
+    "state_path",
+    "task_ttl_minutes",
+    "max_tracked_tasks",
+    "max_fix_cycles",
+    "risk",
+    "gates"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": "1.0.0" },
+    "mode": { "enum": ["shadow", "invariants", "risk"] },
+    "require_agent_loop_permit": { "type": "boolean" },
+    "require_policy_commit": { "type": "boolean" },
+    "permit_ttl_seconds": { "type": "integer", "minimum": 30, "maximum": 86400 },
+    "state_path": { "type": "string", "minLength": 1 },
+    "task_ttl_minutes": { "type": "integer", "minimum": 1 },
+    "max_tracked_tasks": { "type": "integer", "minimum": 1 },
+    "max_fix_cycles": { "type": "integer", "minimum": 0, "maximum": 20 },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "default_level",
+        "docs_only_level",
+        "high_path_patterns",
+        "critical_path_patterns",
+        "high_keyword_patterns",
+        "critical_keyword_patterns",
+        "recovery_keyword_patterns"
+      ],
+      "properties": {
+        "default_level": { "$ref": "#/$defs/riskLevel" },
+        "docs_only_level": { "$ref": "#/$defs/riskLevel" },
+        "high_path_patterns": { "$ref": "#/$defs/patterns" },
+        "critical_path_patterns": { "$ref": "#/$defs/patterns" },
+        "high_keyword_patterns": { "$ref": "#/$defs/patterns" },
+        "critical_keyword_patterns": { "$ref": "#/$defs/patterns" },
+        "recovery_keyword_patterns": { "$ref": "#/$defs/patterns" }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["low", "medium", "high", "critical"],
+      "properties": {
+        "low": { "type": "object" },
+        "medium": { "type": "object" },
+        "high": { "type": "object" },
+        "critical": { "type": "object" }
+      }
+    }
+  },
+  "$defs": {
+    "riskLevel": { "enum": ["low", "medium", "high", "critical"] },
+    "patterns": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}
