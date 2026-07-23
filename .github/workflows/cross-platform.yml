@@ -56,7 +56,19 @@ jobs:
           name: runtime-test-${{ matrix.os }}-node-${{ matrix.node-version }}
           path: runtime-test.log
       - name: Test plugin integration
-        run: node tests/tool-integration-tests.mjs
+        shell: bash
+        run: |
+          set +e
+          node tests/tool-integration-tests.mjs 2>&1 | tee plugin-integration.log
+          status=${PIPESTATUS[0]}
+          set -e
+          exit "$status"
+      - name: Upload plugin-integration diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-integration-${{ matrix.os }}-node-${{ matrix.node-version }}
+          path: plugin-integration.log
       - name: Test bypass detection
         run: node tests/bypass-detection.mjs
       - name: Test installer in POSIX shell
