@@ -1,6 +1,6 @@
 {
   "name": "opencode-agent-loop",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A structured multi-agent feature-development loop for OpenCode with free-first subagent routing and controlled paid fallback.",
   "type": "module",
   "private": true,
