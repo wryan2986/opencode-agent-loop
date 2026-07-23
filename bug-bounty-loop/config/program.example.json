@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "mode": "authorized_program",
+  "program": {
+    "name": "Replace with program name",
+    "platform": "HackerOne, Bugcrowd, Intigriti, or direct",
+    "policy_url": "https://example.com/security",
+    "policy_snapshot_date": "2026-07-23"
+  },
+  "authorization": {
+    "confirmed": false,
+    "confirmed_by": "Your name",
+    "testing_identity": "Your bounty-platform username or required researcher header",
+    "notes": "Confirm the exact current policy before changing confirmed to true."
+  },
+  "scope": {
+    "allowed_origins": [
+      "https://example.com"
+    ],
+    "allowed_path_prefixes": [
+      "/"
+    ],
+    "excluded_origins": [],
+    "excluded_path_prefixes": [
+      "/logout",
+      "/billing"
+    ],
+    "allowed_methods": [
+      "GET",
+      "HEAD",
+      "OPTIONS"
+    ],
+    "max_requests_per_minute": 6,
+    "max_total_requests_per_case": 40,
+    "max_response_bytes": 1048576,
+    "follow_redirects": false,
+    "allow_private_networks": false,
+    "identification_headers": {
+      "X-Bug-Bounty": "replace-with-required-researcher-identifier"
+    }
+  },
+  "safety": {
+    "only_owned_test_accounts": true,
+    "allow_state_change": false,
+    "stop_on_real_user_data": true,
+    "stop_on_service_instability": true,
+    "prohibited_tests": [
+      "denial of service",
+      "credential stuffing",
+      "social engineering",
+      "testing real users",
+      "destructive actions",
+      "persistence",
+      "automated report submission"
+    ]
+  },
+  "reporting": {
+    "human_approval_required": true,
+    "auto_submit": false
+  }
+}
