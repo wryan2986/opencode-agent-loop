@@ -13,7 +13,7 @@ Create one stable `taskId`, inspect and plan the work, and retain semantic contr
 Before every delegated action and before commit:
 
 1. Call `orchestration_policy` with the proposed action, reason, risk, paths, and available evidence.
-2. On `allow`, pass its one-time permit to `agent_loop` or `orchestration_commit`.
+2. On `allow`, pass the returned one-time `policyPermit` to `agent_loop` or `orchestration_commit`.
 3. On `needs_evidence`, gather the requested evidence, record it, replan, or ask the user.
 4. On `deny`, do not repeat the same proposal or bypass the kernel.
 
