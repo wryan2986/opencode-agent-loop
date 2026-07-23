@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import AgentLoopPlugin from '../.opencode/plugins/agent-loop.js';
 
 const dir = mkdtempSync(resolve(tmpdir(), 'agent-loop-tool-'));
@@ -94,7 +94,22 @@ const result = await plugin.tool.agent_loop.execute({
   policyPermit: buildDecision.permit.id
 }, context);
 const parsed = JSON.parse(result.output);
-assert.equal(parsed.status, 'completed', result.output);
+let workerDiagnostics = '';
+if (parsed.status !== 'completed' && parsed.logPath) {
+  try {
+    const logDirectory = dirname(parsed.logPath);
+    const files = readdirSync(logDirectory)
+      .filter(name => name.startsWith(taskId))
+      .sort();
+    workerDiagnostics = files.map(name => {
+      const path = resolve(logDirectory, name);
+      return `\n--- ${name} ---\n${readFileSync(path, 'utf8')}`;
+    }).join('');
+  } catch (error) {
+    workerDiagnostics = `\nUnable to read worker diagnostics: ${error.message}`;
+  }
+}
+assert.equal(parsed.status, 'completed', `${result.output}${workerDiagnostics}`);
 assert.match(parsed.successfulModel, /.+/);
 assert.equal(parsed.policy.task.taskId, taskId);
 assert.ok(parsed.policy.task.evidence.some(item => item.type === 'build' && item.source === 'runtime'));
