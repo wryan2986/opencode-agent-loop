@@ -30,6 +30,10 @@ REQUIRED=(
   "$PACKAGE_DIR/commands/loop.md"
   "$PACKAGE_DIR/commands/loop-init.md"
   "$PACKAGE_DIR/.opencode/plugins/agent-loop.js"
+  "$PACKAGE_DIR/lib/orchestration-policy.mjs"
+  "$PACKAGE_DIR/config/orchestration-policy.json"
+  "$PACKAGE_DIR/config/orchestration-policy-schema.json"
+  "$PACKAGE_DIR/config/free-first-config.json"
   "$PACKAGE_DIR/opencode.json"
 )
 
