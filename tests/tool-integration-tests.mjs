@@ -8,7 +8,7 @@ const dir = mkdtempSync(resolve(tmpdir(), 'agent-loop-tool-'));
 const fakeScript = resolve(dir, 'fake-opencode.cjs');
 const fakeLog = resolve(dir, 'fake-opencode.jsonl');
 writeFileSync(fakeScript, `const fs = require('fs');
-fs.appendFileSync(process.env.AGENT_LOOP_FAKE_LOG, JSON.stringify({ args: process.argv.slice(2), child: process.env.AGENT_LOOP_CHILD, taskId: process.env.AGENT_LOOP_TASK_ID, smokeTest: process.env.AGENT_LOOP_SMOKE_TEST || '' }) + '\\n');
+fs.appendFileSync(process.env.AGENT_LOOP_FAKE_LOG, JSON.stringify({ args: process.argv.slice(2), child: process.env.AGENT_LOOP_CHILD, taskId: process.env.AGENT_LOOP_TASK_ID, smokeTest: process.env.AGENT_LOOP_SMOKE_TEST || '' }) + '\n');
 console.log(JSON.stringify({ type: 'step_start', timestamp: Date.now(), sessionID: 'fake-session', part: { id: 'p1', type: 'step-start' } }));
 console.log(JSON.stringify({ type: 'text', timestamp: Date.now(), sessionID: 'fake-session', part: { id: 'p2', type: 'text', text: 'ok' } }));
 console.log(JSON.stringify({ type: 'step_finish', timestamp: Date.now(), sessionID: 'fake-session', part: { id: 'p3', type: 'step-finish', reason: 'stop', tokens: { input: 1, output: 1 } }));
@@ -91,7 +91,7 @@ const result = await plugin.tool.agent_loop.execute({
   policyPermit: buildDecision.permit.id
 }, context);
 const parsed = JSON.parse(result.output);
-assert.equal(parsed.status, 'completed');
+assert.equal(parsed.status, 'completed', result.output);
 assert.match(parsed.successfulModel, /.+/);
 assert.equal(parsed.policy.task.taskId, taskId);
 assert.ok(parsed.policy.task.evidence.some(item => item.type === 'build' && item.source === 'runtime'));
