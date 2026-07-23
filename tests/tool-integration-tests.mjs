@@ -39,6 +39,7 @@ const context = {
   metadata: () => {}
 };
 const taskId = 'tool-integration-task';
+const verifiedModel = 'opencode/deepseek-v4-flash-free';
 
 const approvalResult = await plugin.tool.orchestration_policy.execute({
   taskId,
@@ -79,7 +80,8 @@ assert.ok(buildDecision.permit?.id);
 const missingPermit = await plugin.tool.agent_loop.execute({
   task: 'harmless smoke task',
   mode: 'build',
-  taskId
+  taskId,
+  models: [verifiedModel]
 }, context);
 assert.equal(JSON.parse(missingPermit.output).code, 'POLICY_PERMIT_REQUIRED');
 
@@ -88,6 +90,7 @@ const result = await plugin.tool.agent_loop.execute({
   mode: 'build',
   maxRetries: 0,
   taskId,
+  models: [verifiedModel],
   policyPermit: buildDecision.permit.id
 }, context);
 const parsed = JSON.parse(result.output);
@@ -112,6 +115,7 @@ const reused = await plugin.tool.agent_loop.execute({
   task: 'reuse permit',
   mode: 'build',
   taskId,
+  models: [verifiedModel],
   policyPermit: buildDecision.permit.id
 }, context);
 assert.equal(JSON.parse(reused.output).code, 'POLICY_PERMIT_CONSUMED');
@@ -128,6 +132,7 @@ const blocked = await plugin.tool.agent_loop.execute({
   task: 'nested',
   mode: 'build',
   taskId: 'nested-task',
+  models: [verifiedModel],
   policyPermit: 'not-valid'
 }, { ...context, agent: 'build-worker' });
 delete process.env.AGENT_LOOP_CHILD;
