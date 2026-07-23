@@ -18,7 +18,7 @@ permission:
   todo: allow
   question: allow
   bash:
-    "*": ask
+    "*": allow
     git status: allow
     git diff: allow
     git log: allow
