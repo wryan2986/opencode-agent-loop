@@ -11,7 +11,7 @@ writeFileSync(fakeScript, `const fs = require('fs');
 fs.appendFileSync(process.env.AGENT_LOOP_FAKE_LOG, JSON.stringify({ args: process.argv.slice(2), child: process.env.AGENT_LOOP_CHILD, taskId: process.env.AGENT_LOOP_TASK_ID, smokeTest: process.env.AGENT_LOOP_SMOKE_TEST || '' }) + String.fromCharCode(10));
 console.log(JSON.stringify({ type: 'step_start', timestamp: Date.now(), sessionID: 'fake-session', part: { id: 'p1', type: 'step-start' } }));
 console.log(JSON.stringify({ type: 'text', timestamp: Date.now(), sessionID: 'fake-session', part: { id: 'p2', type: 'text', text: 'ok' } }));
-console.log(JSON.stringify({ type: 'step_finish', timestamp: Date.now(), sessionID: 'fake-session', part: { id: 'p3', type: 'step-finish', reason: 'stop', tokens: { input: 1, output: 1 } }));
+console.log(JSON.stringify({ type: 'step_finish', timestamp: Date.now(), sessionID: 'fake-session', part: { id: 'p3', type: 'step-finish', reason: 'stop', tokens: { input: 1, output: 1 } } }));
 console.log('RESULT: PASS');
 process.exit(0);
 `, 'utf8');
