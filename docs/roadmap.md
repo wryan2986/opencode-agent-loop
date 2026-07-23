@@ -33,15 +33,24 @@ A reliable, safe, and extensible open-source framework for autonomous software-d
 - [x] Scheduled OpenCode patch compatibility workflow
 - [x] Runtime configuration schema and integration-contract validation
 
-## Version 0.3 — Recovery and evaluation
+## Version 0.3 — Policy, recovery, and evaluation
 
-**Focus:** Deeper resilience, performance measurement, and operational visibility.
+**Focus:** Preserve flexible model reasoning while strengthening durable authorization, recovery, and measurable performance.
 
-- [ ] Resumable workflow controller with durable stage checkpoints
-- [ ] Automatic recovery from interrupted build/test/review stages
-- [ ] Reusable evaluation harness for agent quality, latency, and cost
+- [x] Hybrid orchestration policy kernel with model-proposed actions
+- [x] Shadow-mode policy observation
+- [x] Hard-invariant enforcement with risk gates advisory
+- [x] Risk-based low, medium, high, and critical evidence enforcement
+- [x] Durable one-time action permits and fix-cycle state
+- [x] Staged-candidate hashing and policy-controlled final commits
+- [ ] Evaluation report for model/kernel disagreements, false blocks, skipped stages, cost, and completion quality
+- [ ] Resumable workflow recovery using durable policy, budget, candidate, and event state
+- [ ] Automatic recovery from interrupted build/test/review stages when evidence remains valid
+- [ ] Strict versioned worker-result envelopes with fail-closed parsing
+- [ ] First-class baseline result semantics for clean, reproduced, pre-existing-failure, and blocked outcomes
 - [ ] Optional task-progress dashboard backed by structured events
 - [ ] Container-based execution profiles for stronger isolation
+- [ ] Isolated Git worktrees and deterministic reconciliation before enabling parallel writers
 - [ ] Community-contributed role and provider packs
 - [ ] Expanded local-model benchmarking and hardware guidance
 

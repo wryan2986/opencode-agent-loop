@@ -1,8 +1,33 @@
 # Configuration
 
-OpenCode Agent Loop separates stable model metadata, role ordering, runtime policy, and generated state.
+OpenCode Agent Loop separates orchestration policy, stable model metadata, role ordering, runtime policy, and generated state.
 
 ## Stable configuration
+
+### `config/orchestration-policy.json`
+
+Controls the hybrid model/kernel boundary:
+
+- enforcement mode: `shadow`, `invariants`, or `risk`
+- whether delegated calls require one-time permits
+- whether the final commit must use `orchestration_commit`
+- permit lifetime
+- persistent policy-state retention
+- maximum fix cycles
+- path and keyword risk signals
+- documented low, medium, high, and critical evidence gates
+
+The default is `risk`, which enforces hard invariants and risk-based minimum evidence. See [Hybrid Orchestration Policy](orchestration-policy.md).
+
+Temporary evaluation overrides:
+
+```bash
+AGENT_LOOP_POLICY_MODE=shadow opencode
+AGENT_LOOP_POLICY_MODE=invariants opencode
+AGENT_LOOP_POLICY_MODE=risk opencode
+```
+
+Managed deployments and tests may override the state file with `AGENT_LOOP_POLICY_STATE_PATH`. Do not use overrides to evade a repository's approved policy.
 
 ### `config/free-first-config.json`
 
@@ -16,13 +41,56 @@ Defines ordered model candidates for every role. A pool normally contains free m
 
 Stores stable model identity, capability, privacy, retirement, and pricing metadata.
 
-### `config/free-first-config-schema.json`
+### Configuration schemas
 
-Defines the supported policy structure. CI also runs semantic checks that JSON Schema alone cannot express.
+- `config/orchestration-policy-schema.json` defines the hybrid orchestration policy.
+- `config/free-first-config-schema.json` defines the routing and runtime policy.
+- `config/agent-loop-event.schema.json` defines structured events.
+
+CI also runs semantic checks that JSON Schema alone cannot express.
+
+## Hybrid orchestration strategy
+
+The authority boundary is:
+
+> The model proposes; the kernel validates; an authorized tool executes.
+
+The orchestration model decides planning, decomposition, semantic risk, validation strategy, next action, replanning, escalation, and user communication. The kernel controls approval records, stable task identity, budgets, one-time permits, minimum risk evidence, candidate hashes, fix limits, and final commit authorization.
+
+A delegated call follows this pattern:
+
+1. The orchestrator proposes an action through `orchestration_policy`.
+2. The kernel returns `allow`, `needs_evidence`, or `deny`.
+3. An allowed delegated action includes a one-time `policyPermit`.
+4. The orchestrator passes that permit to the matching `agent_loop` mode.
+5. The kernel consumes the permit and records the runtime result.
+
+Direct use of OpenCode's built-in `task` tool bypasses this package's router, budgets, evidence, and policy controls and is prohibited for feature work.
+
+## Risk policy
+
+The model proposes `low`, `medium`, `high`, or `critical` risk and supplies reasons and likely paths. The kernel independently examines task text, planned paths, and actual staged paths. It may elevate the effective risk level but never lower the model's proposal.
+
+Default final gates:
+
+| Risk | Minimum evidence |
+|---|---|
+| Low | Relevant validation or test plus independent review |
+| Medium | Baseline or justified skip, focused runtime test, independent review |
+| High | Baseline, runtime test, representative integration evidence, review, recovery evidence when applicable |
+| Critical | High-risk evidence plus isolation and a final human checkpoint |
+
+These are minimums. The model still chooses the repository-appropriate commands and implementation strategy.
+
+## Candidate identity and commit policy
+
+After staging intended files, the orchestrator proposes `stage_candidate`. The kernel computes a SHA-256 digest of the staged binary diff and records the file list.
+
+Final test and review evidence is bound to that candidate. A later file change invalidates the previous evidence. The final `commit` proposal produces a one-time commit permit, and `orchestration_commit` recalculates the hash before running Git. Candidate drift fails closed with `POLICY_CANDIDATE_CHANGED`.
 
 ## Routing strategy
 
-The default strategy is:
+The default model strategy is:
 
 - paid DeepSeek V4 Flash for the parent orchestrator
 - free-first pools for delegated build, test, review, exploration, and reconciliation work
@@ -30,19 +98,17 @@ The default strategy is:
 - controlled paid fallback after suitable free/local choices fail or are unavailable
 - GPT-5.6 Luna for explicit escalation and difficult diagnosis
 
-The `/feature` command must make delegated calls through `agent_loop`. Direct use of OpenCode's built-in `task` tool bypasses this package's router and safety controls.
-
 Provider adapters normalize identity, timeout selection, and provider-specific errors. See [Provider Adapters](provider-adapters.md).
 
 ## Retry policy
 
 `maxRetries` controls retries of the same model after transient provider or network failures. Retries use exponential backoff plus jitter and count toward the task budget. Provider failover begins only after same-model retries are exhausted.
 
-Authentication, billing, safety, invalid-request, task-quality, cancellation, and budget failures are terminal.
+Authentication, billing, safety, invalid-request, task-quality, cancellation, policy, and budget failures are terminal or require a new authorized action rather than blind retries.
 
 ## Task budgets
 
-One stable task ID shares a ledger across smoke, build, test, review, fixes, escalation, and provider failover.
+One stable task ID shares a ledger across baseline, smoke, build, test, review, fixes, escalation, and provider failover.
 
 Default limits are:
 
@@ -86,7 +152,13 @@ The default append-only stream is:
 <project>/.opencode/agent-loop-state/events.jsonl
 ```
 
-Events conform to `config/agent-loop-event.schema.json` and cover stages, model attempts, retries, provider cooldowns, budget updates, and completion. See [Structured Event Logging](event-logging.md).
+Events conform to `config/agent-loop-event.schema.json` and cover policy proposals and decisions, permits, stages, model attempts, retries, provider cooldowns, budget updates, candidate state, and completion. See [Structured Event Logging](event-logging.md).
+
+Policy state is stored separately at:
+
+```text
+<project>/.opencode/agent-loop-state/policy.json
+```
 
 ## Provider timeouts
 

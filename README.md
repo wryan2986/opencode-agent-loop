@@ -3,13 +3,13 @@
 [![Project Status](https://img.shields.io/badge/status-v0.2.0--pre--release-yellow?style=for-the-badge)](https://github.com/wryan2986/opencode-agent-loop)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A reusable OpenCode agent-loop package for structured feature development with specialized planning, building, testing, independent review, recovery, and local agents.
+A reusable OpenCode agent-loop package for policy-constrained feature development with specialized planning, building, testing, independent review, recovery, and local agents.
 
 > **Independent project:** OpenCode Agent Loop is a community project. It is not built, maintained, or endorsed by the OpenCode team.
 
-`plan → approve → smoke → build → test → review → fix/escalate → commit`
+`model proposes → policy validates → permitted worker executes → evidence is recorded`
 
-The parent orchestrator uses paid DeepSeek for coordination. Delegated workers use free-first model pools with same-model retries, provider failover, local-model support, persistent budgets, structured events, and controlled paid fallback.
+The paid DeepSeek parent orchestrator retains judgment over planning, decomposition, validation strategy, risk, replanning, and user communication. Delegated workers use free-first model pools with retries, provider failover, local-model support, persistent budgets, structured events, controlled paid fallback, and one-time policy permits.
 
 ## Important prerequisite
 
@@ -52,42 +52,66 @@ opencode
 /feature Implement user authentication
 ```
 
-## Reliability architecture
+## Hybrid orchestration architecture
 
 ```text
-              User request
-                   |
-                   v
-+--------------------------------------+
-| Parent orchestrator                  |
-| Plans and reuses one stable task ID  |
-+--------------------------------------+
-                   |
-                   v
-+--------------------------------------+
-| agent_loop runtime                   |
-| Retry | Route | Failover | Budget    |
-+--------------------------------------+
-                   |
-                   v
-+--------------------------------------+
-| Provider adapters and worker pools   |
-| Free/local models -> paid fallback   |
-+--------------------------------------+
-                   |
-                   v
-+--------------------------------------+
-| Persistent state and events          |
-| Budget ledger | JSONL audit stream   |
-+--------------------------------------+
+                 User request
+                      |
+                      v
++--------------------------------------------+
+| Parent orchestrator                        |
+| Plans, reasons, proposes risk + next action|
++--------------------------------------------+
+                      |
+                      v
++--------------------------------------------+
+| Orchestration policy kernel                |
+| Approval | Evidence | Risk | Permit | Hash |
++--------------------------------------------+
+                      |
+               one-time permit
+                      |
+                      v
++--------------------------------------------+
+| agent_loop runtime                         |
+| Retry | Route | Failover | Worker Budget   |
++--------------------------------------------+
+                      |
+                      v
++--------------------------------------------+
+| Provider adapters and worker pools         |
+| Free/local models -> controlled paid use   |
++--------------------------------------------+
+                      |
+                      v
++--------------------------------------------+
+| Persistent state and structured events     |
+| Policy | Budgets | Candidate | JSONL audit |
++--------------------------------------------+
 ```
+
+The kernel is a referee, not the primary conductor. It does not choose the architecture, files, test commands, or next semantic step. It validates the model's proposed action and returns:
+
+- `allow` — proceed, using the returned permit when applicable
+- `needs_evidence` — gather evidence, replan, ask the user, or choose another legitimate action
+- `deny` — stop or select a different legal action; do not bypass the decision
+
+Policy modes support staged evaluation:
+
+- `shadow` — observe what would be blocked without blocking it
+- `invariants` — enforce non-negotiable safeguards; risk gates remain advisory
+- `risk` — enforce invariants and risk-based minimum evidence; this is the default
+
+See [Hybrid Orchestration Policy](docs/orchestration-policy.md).
 
 Stable configuration lives in:
 
+- `config/orchestration-policy.json` — policy mode, permits, risk signals, and minimum evidence
 - `config/free-first-config.json` — routing, retry, timeout, budget, and event policy
 - `config/free-first-pools.json` — ordered model pools by role
 - `config/model-registry.json` — capabilities, privacy, retirement, and pricing metadata
-- `config/free-first-config-schema.json` — supported policy schema
+- `config/orchestration-policy-schema.json` — orchestration policy schema
+- `config/free-first-config-schema.json` — runtime policy schema
 - `config/agent-loop-event.schema.json` — versioned event schema
 
 See [Architecture](docs/architecture.md) and [Configuration](docs/configuration.md).
@@ -96,22 +120,27 @@ See [Architecture](docs/architecture.md) and [Configuration](docs/configuration.
 
 | Command | Description |
 |---------|-------------|
-| `/feature <description>` | Run the complete approved workflow through the orchestrator |
-| `/loop <description>` | Run one `agent_loop` role call directly |
+| `/feature <description>` | Run the full flexible policy-constrained workflow |
+| `/loop <description>` | Run a compact policy-controlled workflow |
 | `/loop-init` | Install project-specific agent-loop files |
 | `npm run events -- --task <id>` | Query the local structured event log |
 
-## v0.2 safeguards
+## Safeguards
 
-- one stable task ID across all feature stages
-- persistent token, cost, and workflow-call budgets
+- one stable task ID across policy, workers, failover, and budgets
+- explicit approval recorded before implementation
+- one-time action- and mode-bound worker permits
+- low, medium, high, and critical risk evidence gates
+- model-proposed risk that the kernel may elevate but never lower
+- persistent token, cost, workflow-call, policy, and paid-use state
 - terminal budget exhaustion with no replacement-ID bypass
 - bounded paid parent orchestration turns
 - same-model transient retries with exponential backoff and jitter
 - provider adapters for identity, timeout, and error normalization
-- local/Ollama timeout handling even for model IDs without `/`
 - append-only, versioned, recursively redacted event logs
-- portable checkpoint paths and cross-platform Node CI
+- staged-candidate SHA-256 binding for final test, review, and commit
+- policy-controlled commit with a final candidate-drift check
+- portable state paths and cross-platform Node CI
 - scheduled patched-OpenCode compatibility builds
 - independent test and review gates before the final local commit
 
@@ -124,7 +153,7 @@ opencode-agent-loop/
 ├── agents/              Agent definitions
 ├── commands/            OpenCode slash commands
 ├── config/              Policy, pools, registry, and schemas
-├── lib/                 Routing, adapters, budgets, events, and failover
+├── lib/                 Policy, routing, adapters, budgets, events, and failover
 ├── runtime/             Controller and worker execution
 ├── .opencode/           Plugin and project-local commands
 ├── skills/              Reusable project-analysis skills
@@ -138,9 +167,9 @@ opencode-agent-loop/
 
 ## Safety model
 
-The package requires explicit approval before implementation, routes workers through a budget-enforced runtime, runs independent testing and review, blocks automatic pushes, denies destructive Git commands, guards against recursion, and filters providers by privacy policy.
+The package requires explicit approval before implementation, routes workers through a policy- and budget-enforced runtime, runs independent testing and review, blocks automatic pushes, denies destructive Git commands, guards against recursion, and filters providers by privacy policy.
 
-Prompt permissions and redaction are not an operating-system sandbox. Use a container or VM for untrusted repositories. See [Safety Model](docs/safety-model.md).
+Prompt permissions, policy checks, and redaction are not an operating-system sandbox. Use a container or VM for untrusted repositories. See [Safety Model](docs/safety-model.md).
 
 ## Validation
 
@@ -157,6 +186,7 @@ The full command includes Bash permission checks. The portable command is exerci
 - [Architecture](docs/architecture.md)
 - [Agent Roles](docs/agent-roles.md)
 - [Configuration](docs/configuration.md)
+- [Hybrid Orchestration Policy](docs/orchestration-policy.md)
 - [Provider Adapters](docs/provider-adapters.md)
 - [Structured Event Logging](docs/event-logging.md)
 - [Platform Support](docs/platforms.md)

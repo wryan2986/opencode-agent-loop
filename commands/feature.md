@@ -1,75 +1,72 @@
 ---
 agent: orchestrator
 description: >
-  Run the full agent workflow for a feature, fix, refactor, migration,
-  documentation, or UI change. The orchestrator inspects, plans, obtains
-  approval, then drives baseline, smoke, build, test, review, and escalation
-  through budget-enforced agent_loop calls before creating a local commit.
+  Run a feature, fix, refactor, migration, documentation, or UI change through
+  the hybrid policy kernel, budgeted agent_loop workers, independent review,
+  and a policy-controlled local commit.
 ---
 
-# /feature — Autonomous feature workflow
+# /feature — Policy-constrained autonomous workflow
 
-Run the complete OpenCode agent lifecycle for a single unit of work.
+Run one unit of development work while preserving the orchestration model's judgment about planning, decomposition, validation strategy, and replanning.
 
-## Usage
+## Required operating pattern
 
-```text
-/feature <description of work>
-```
+1. Create one stable `taskId` at the beginning and reuse it for every policy and worker call.
+2. Use `orchestration_policy` to propose each next action.
+3. Read the decision:
+   - `allow` — proceed and use the returned one-time permit when present.
+   - `needs_evidence` — gather or record the requested evidence, or choose another legitimate action.
+   - `deny` — stop, replan, ask the user, or choose a different permitted action.
+4. Use `agent_loop` only with a matching `policyPermit`.
+5. Use `orchestration_commit` for the final local commit. Never run `git commit` directly.
+6. Never use the built-in `task` tool for delegated work.
 
-## Required execution pattern
+The configured kernel mode is recorded in every decision:
 
-The orchestrator must create one stable `taskId` after approval and reuse it for every `agent_loop` call in this feature. This makes token, cost, and workflow-call limits cumulative across stages and failover attempts.
+- `shadow` observes without blocking.
+- `invariants` enforces non-negotiable safeguards and reports risk gates as advisory.
+- `risk` enforces safeguards and risk-based minimum evidence. This is the default.
 
-Example:
+## Flexible action loop
 
-```text
-feature-auth-refresh-20260722T210000Z
-```
+The workflow is not a mandatory linear pipeline. The orchestrator may propose:
 
-The orchestrator must not use the built-in `task` tool for delegated work because that bypasses the agent-loop router and budget ledger.
+- inspection, replanning, asking the user, or stopping
+- approval recording
+- baseline testing or a justified baseline skip
+- smoke testing
+- build, test-only, review-only, fix, or escalation work
+- staged-candidate registration
+- semantic evidence such as integration coverage, recovery plans, isolation, or human checkpoints
+- final commit authorization
 
-All delegated roles run sequentially in the shared working tree. Do not parallelize workers until isolated worktrees and deterministic reconciliation are implemented.
+The kernel may elevate risk based on task text or actual staged paths, but it never lowers the orchestrator's proposed risk.
 
-## Workflow
+Minimum final evidence generally scales as follows:
 
-1. **Read project instructions** — inspect `AGENTS.md` and repository-specific guidance.
-2. **Inspect** — read affected code, repository status, and relevant configuration. Stop for user direction when unrelated staged changes already exist.
-3. **Discover validation commands** — identify build, test, lint, type-check, and documentation checks.
-4. **Plan** — produce explicit acceptance criteria and a concise implementation plan.
-5. **Obtain approval** — wait for explicit user approval.
-6. **Create the stable task ID** — retain it for the entire feature.
-7. **Baseline test** — call `agent_loop` with `mode: "test"` to record pre-change behavior, current failures, and validation commands. A reproduced target bug may be an expected baseline failure; ambiguous failures block implementation.
-8. **Smoke test** — call `agent_loop` with `mode: "smoke"` and the stable `taskId`; save responsive model IDs.
-9. **Build** — call `agent_loop` with `mode: "build"`, the same `taskId`, and responsive model IDs.
-10. **Test** — call `agent_loop` with `mode: "test"` and the same `taskId`; compare results with the baseline.
-11. **Stage the review candidate** — stage only intended implementation, test, and documentation files with explicit pathspecs. Verify `git diff --cached --name-only` and `git diff --cached --check`.
-12. **Review** — call `agent_loop` with `mode: "review"` and the same `taskId`. Provide acceptance criteria, baseline/test evidence, and the intended staged-file list. An empty or incomplete staged candidate is `BLOCKED`, never `PASS`.
-13. **Fix** — combine findings into a bounded build request, rerun test, restage the complete candidate, and rerun review with the same ID. Maximum two fix cycles.
-14. **Escalate** — use `mode: "escalate"` only for non-budget blockers and retain the same ID.
-15. **Commit and clean up** — commit only the exact candidate that received final test and review PASS. Stop or explicitly account for test-owned background processes.
-16. **Report** — include baseline, test and review evidence, commit hash, changed files, cleanup status, and the budget snapshot.
+- low: relevant validation and independent review
+- medium: baseline or justified skip, focused test, independent review
+- high: baseline, runtime test, representative integration evidence, review, and recovery evidence when applicable
+- critical: high-risk evidence plus isolation and a final human checkpoint
 
-## Budget exhaustion
+## Candidate integrity
 
-`code: "BUDGET_EXCEEDED"` is terminal for the feature request.
+Stage only intended files with explicit pathspecs, then propose `stage_candidate`. The kernel hashes the staged diff. Final test and review results are bound to that hash, and the commit tool refuses to commit if the staged candidate changes after authorization.
 
-When it occurs:
+After any fix or test-generated file change:
 
-- stop all retries and escalation
-- do not generate a replacement task ID
-- do not bypass the limit with direct task delegation
-- report limits, usage, cost, exceeded reasons, and the per-step/per-model breakdown
-
-The budget covers delegated worker calls made through `agent_loop`. It does not include the parent orchestrator model's own conversation usage.
+1. restage the complete intended candidate
+2. propose `stage_candidate` again
+3. rerun final test and review against the new hash
 
 ## Hard rules
 
-- Reject an empty task with: "Please describe the work to be done."
-- Preserve unrelated working-tree changes.
-- Never mix pre-existing staged changes into the feature review or commit.
-- Never use `git add .` or `git add -A` when unrelated changes exist.
-- Never push automatically.
-- Never rewrite history or run destructive cleanup commands.
-- Only the orchestrator may create the final commit.
-- See `agents/orchestrator.md` for the complete execution contract.
+- Wait for explicit approval before implementation.
+- Preserve unrelated working-tree and staged changes.
+- Never parallelize delegated roles in one shared working tree.
+- Never fabricate evidence or repeatedly argue with a denial.
+- `BUDGET_EXCEEDED` is terminal for delegated work.
+- Never push, merge, rewrite history, or run destructive cleanup automatically.
+
+See `agents/orchestrator.md` for the complete action, evidence, permit, and risk contract.

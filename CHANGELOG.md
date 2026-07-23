@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added a durable hybrid orchestration policy kernel with `shadow`, `invariants`, and `risk` enforcement modes.
+- Added the `orchestration_policy` tool for model-proposed actions, risk, evidence, and one-time permits.
+- Added the `orchestration_commit` tool, which rechecks the staged candidate hash before creating the final local commit.
+- Added persistent policy state, policy events, fix-cycle accounting, and staged-candidate SHA-256 binding.
+- Added low, medium, high, and critical risk gates while preserving agent choice over planning, decomposition, validation strategy, replanning, and user communication.
+- Added deterministic policy-kernel and permit-integration tests plus configuration schemas and documentation.
+
+### Changed
+
+- Changed `/feature` and `/loop` from fixed pipeline instructions to a flexible policy-constrained action graph.
+- Required every delegated worker call to consume a matching one-time policy permit.
+- Prohibited direct orchestrator commits in favor of policy-controlled commit authorization.
+- Updated orchestration contracts so the kernel may elevate but never lower the model's proposed risk.
+
 ## [0.2.0] - 2026-07-22
 
 ### Added

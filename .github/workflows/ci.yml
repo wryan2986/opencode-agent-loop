@@ -61,7 +61,21 @@ jobs:
         run: npm run validate:budget
 
       - name: Check feature integration contract
-        run: npm run validate:feature
+        id: feature-contract
+        shell: bash
+        run: |
+          set +e
+          npm run validate:feature 2>&1 | tee feature-contract.log
+          status=${PIPESTATUS[0]}
+          set -e
+          exit "$status"
+
+      - name: Upload feature-contract diagnostics
+        if: failure() && matrix.node-version == 22
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-contract-node-22
+          path: feature-contract.log
 
       - name: Check documentation links
         run: node scripts/check-doc-links.mjs

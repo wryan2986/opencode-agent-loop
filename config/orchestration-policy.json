@@ -1,0 +1,59 @@
+{
+  "$schema": "./orchestration-policy-schema.json",
+  "version": "1.0.0",
+  "mode": "risk",
+  "require_agent_loop_permit": true,
+  "require_policy_commit": true,
+  "permit_ttl_seconds": 900,
+  "state_path": ".opencode/agent-loop-state/policy.json",
+  "task_ttl_minutes": 1440,
+  "max_tracked_tasks": 1000,
+  "max_fix_cycles": 2,
+  "risk": {
+    "default_level": "medium",
+    "docs_only_level": "low",
+    "high_path_patterns": [
+      "(^|/)(auth|authentication|authorization|security|permissions?|migrations?|deploy|deployment|infra|infrastructure)(/|$)",
+      "(^|/)(Dockerfile|docker-compose\\.(?:yml|yaml)|terraform|k8s|kubernetes)(/|$|\\.)"
+    ],
+    "critical_path_patterns": [
+      "(^|/)(payments?|billing|production|prod|secrets?)(/|$)",
+      "(^|/)(delete|destroy|purge|wipe|drop)[^/]*\\.(?:sh|js|mjs|ts|py)$"
+    ],
+    "high_keyword_patterns": [
+      "authentication|authorization|access control|database migration|schema migration|deployment|secret handling|encryption"
+    ],
+    "critical_keyword_patterns": [
+      "payment|billing|production deployment|delete production|drop table|destructive migration|rotate secrets"
+    ],
+    "recovery_keyword_patterns": [
+      "migration|deployment|delete|destroy|purge|wipe|drop table|payment|billing"
+    ]
+  },
+  "gates": {
+    "low": {
+      "baseline": "optional",
+      "test": "validation",
+      "review": true
+    },
+    "medium": {
+      "baseline": "required-or-justified-skip",
+      "test": "focused",
+      "review": true
+    },
+    "high": {
+      "baseline": "required",
+      "test": "integration",
+      "review": true,
+      "recovery_plan_when_applicable": true
+    },
+    "critical": {
+      "baseline": "required",
+      "test": "integration",
+      "review": true,
+      "recovery_plan": true,
+      "isolation": true,
+      "human_checkpoint": true
+    }
+  }
+}
