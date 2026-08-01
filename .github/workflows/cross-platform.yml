@@ -51,7 +51,7 @@ jobs:
           exit "$status"
       - name: Upload runtime-test diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: runtime-test-${{ matrix.os }}-node-${{ matrix.node-version }}
           path: runtime-test.log
@@ -65,7 +65,7 @@ jobs:
           exit "$status"
       - name: Upload plugin-integration diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: plugin-integration-${{ matrix.os }}-node-${{ matrix.node-version }}
           path: plugin-integration.log
