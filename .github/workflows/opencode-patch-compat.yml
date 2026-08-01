@@ -88,7 +88,7 @@ jobs:
 
       - name: Upload compatibility evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: opencode-supported-compatibility
           path: |
@@ -134,7 +134,7 @@ jobs:
           cat opencode-dev-patch-check.txt >> opencode-dev-probe.txt
       - name: Upload upstream probe evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: opencode-dev-probe
           path: opencode-dev-probe.txt
