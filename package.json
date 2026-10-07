@@ -28,6 +28,6 @@
     "validate:portable": "npm run validate:routing && npm run validate:budget && npm run validate:feature && node scripts/check-doc-links.mjs && npm test"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "1.18.4"
+    "@opencode-ai/plugin": "1.18.34"
   }
 }
